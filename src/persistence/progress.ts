@@ -1,4 +1,4 @@
-import { extraPracticeIds } from '../course/curriculum.js';
+import { courseTopics, extraPracticeIds } from '../course/curriculum.js';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -8,6 +8,7 @@ import { blankProgress, type Attempt, type Progress } from '../game/state.js';
 import { badges, difficulties, earnedBadges, legacyIds, LESSON_COUNT, NAVIGATION_COUNT, stageIds, type Difficulty } from '../lessons/catalog.js';
 
 const PROGRESS_SCHEMA_VERSION = 2;
+const validBadges = new Set<string>([...badges, ...courseTopics.flatMap(topic => [...topic.commands])]);
 
 function validResult(value: unknown): value is LessonResult {
   if (typeof value !== 'object' || value === null) return false;
@@ -41,7 +42,7 @@ export function loadProgress(path = progressPath()): Progress {
     const legacy = value.schemaVersion !== PROGRESS_SCHEMA_VERSION;
     if (!Number.isInteger(value.completed) || value.completed! < 0 || value.completed! > (legacy ? legacyIds.length : LESSON_COUNT) ||
         !Array.isArray(value.badges) || !(legacy ? value.badges.length === value.completed && value.badges.every((badge, index) => badge === badges[index]) :
-          value.badges.every(badge => badges.includes(badge as typeof badges[number])) && earnedBadges(value.completed!).every(badge => value.badges!.includes(badge)))) return blankProgress();
+          value.badges.every(badge => validBadges.has(badge)) && earnedBadges(value.completed!).every(badge => value.badges!.includes(badge)))) return blankProgress();
     const completed = legacy ? value.completed === legacyIds.length ? NAVIGATION_COUNT :
       value.completed === 0 ? 0 : stageIds.indexOf(legacyIds[value.completed!]!) : value.completed!;
     const normalizedKey = (key: string): string => {

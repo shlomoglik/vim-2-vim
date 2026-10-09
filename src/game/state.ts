@@ -19,6 +19,7 @@ export type Game = {
   newUnlock: boolean; statsOffset: number;
   command: CommandState;
   usedCommands: string[]; edit: EditState | null; course?: CourseState; statsPracticeId?: string;
+  goalCommandOffset?: number;
 };
 const base: Motion[] = ['h', 'j', 'k', 'l'];
 const simpleMotions: readonly string[] = ['w', 'b', 'e', '0', '$', '^', 'gg', 'G'];

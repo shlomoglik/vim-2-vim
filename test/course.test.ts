@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { courseEntries, newCourseState } from '../src/course/browser.js';
 import { animatedDemo, newDemo, stepDemo } from '../src/course/demo.js';
-import { courseMotions, courseSections, courseTopics, examplePracticeId, extraPracticeIds, navigationCommands, topicPracticeIds } from '../src/course/curriculum.js';
-import { createExamplePractice, validateExample } from '../src/course/practices.js';
+import { courseMotions, courseSections, courseTopics, examplePracticeId, extraPracticeIds, navigationCommands, topicPracticeId, topicPracticeIds } from '../src/course/curriculum.js';
+import { createExamplePractice, createTopicPractice, validateExample } from '../src/course/practices.js';
 import { play } from '../src/game/play.js';
 import { newGame } from '../src/game/state.js';
 import { loadProgress, saveProgress } from '../src/persistence/progress.js';
@@ -65,7 +65,7 @@ function searchMenu(engine: GameEngine, text: string): void {
 }
 function openTopic(engine: GameEngine, section: string, title: string): void {
   engine.handleInput('r');
-  searchMenu(engine, section);
+  void section;
   searchMenu(engine, title);
 }
 
@@ -73,8 +73,9 @@ test('the curriculum covers each legacy practice and five sections without dupli
   assert.deepEqual(courseSections.map(section => section.title), ['Movement', 'Insertion', 'Editing', 'Text objects', 'Visual mode']);
   assert.equal(new Set(courseTopics.map(topic => topic.id)).size, courseTopics.length);
   const practices = new Set(courseTopics.flatMap(topicPracticeIds));
-  assert.ok(stageIds.every(id => practices.has(id)));
-  assert.equal(extraPracticeIds.size, courseTopics.reduce((sum, topic) => sum + topic.examples.length, 0));
+  assert.ok(courseTopics.every(topic => practices.has(topicPracticeId(topic))));
+  assert.ok(stageIds.every(id => courseTopics.some(topic => topic.legacyPractices?.includes(id))));
+  assert.equal(extraPracticeIds.size, courseTopics.reduce((sum, topic) => sum + topic.examples.length + 1, 0));
   const words = courseTopics.find(topic => topic.id === 'word-movement')!;
   const WORDS = courseTopics.find(topic => topic.id === 'WORD-movement')!;
   assert.deepEqual(words.commands, ['w', 'e', 'b']);
@@ -110,24 +111,26 @@ test('WORD practices save under stable IDs, resume their menu, and remain visibl
   const engine = new GameEngine(undefined, { clock });
   openTopic(engine, 'Movement', 'Move by WORDS');
   assert.equal(engine.state.course?.topicId, 'WORD-movement');
-  engine.handleInput('\n'); // examples
+  engine.handleInput('j'); engine.handleInput('\n'); // examples
   const before = engine.state.progress;
   assert.equal(engine.handleInput('\n').persist, false);
   assert.equal(engine.state.progress, before);
   assert.equal(engine.state.course?.demo?.cursor.col, 8);
   engine.handleInput('r');
   assert.equal(engine.state.course?.demo?.step, 0);
-  engine.handleInput('p'); engine.handleInput('\n');
+  engine.handleInput('p');
   assert.equal(engine.state.phase, 'play');
-  assert.equal(engine.handleInput('W').persist, true);
+  assert.equal(engine.handleInput('W').persist, false);
+  for (const goal of engine.state.activeLesson!.goals!.slice(1)) for (const key of goal.keys) engine.handleInput(key);
+  assert.equal(engine.state.phase, 'reward');
   const id = engine.state.course!.practiceId!;
   assert.equal(engine.state.progress.completed, 0);
   assert.ok(engine.state.progress.attempts[`normal:${id}`]?.length);
   engine.handleInput('\n');
   assert.equal(engine.state.phase, 'course');
-  assert.equal(engine.state.course?.view, 'practice');
-  assert.match(courseEntries(engine.state)[0]!.label, /^✓/);
-  engine.handleInput('escape'); engine.handleInput('escape'); engine.handleInput('escape');
+  assert.equal(engine.state.course?.view, 'sections');
+  assert.match(courseEntries(engine.state).find(entry => entry.id === 'WORD-movement')!.label, /✓/);
+  assert.ok(engine.state.progress.badges.includes('W'));
   searchMenu(engine, 'View stats');
   assert.equal(engine.state.phase, 'stats');
   assert.match(new GameRenderer().render(engine.state, 80, 40, 1000).join('\n'), /Move by WORDS/);
@@ -144,8 +147,7 @@ test('WORD practices save under stable IDs, resume their menu, and remain visibl
 test('Escape cancels pending commands before returning to the practice menu', () => {
   const engine = new GameEngine(undefined, { clock });
   openTopic(engine, 'Insertion', 'Insert and append');
-  engine.handleInput('j'); engine.handleInput('\n'); // practice menu
-  engine.handleInput('j'); engine.handleInput('\n'); // i exercise
+  engine.handleInput('p'); // mixed insertion practice
   engine.handleInput('i');
   engine.handleInput('escape');
   assert.equal(engine.state.phase, 'play');
@@ -155,28 +157,92 @@ test('Escape cancels pending commands before returning to the practice menu', ()
   assert.equal(engine.state.phase, 'play');
   assert.equal(engine.state.edit?.navigation.pending, '');
   engine.handleInput('escape');
-  assert.equal(engine.state.course?.view, 'practice');
+  assert.equal(engine.state.course?.view, 'sections');
   assert.equal(engine.state.phase, 'course');
 });
 
-test('menu navigation skips headings, returns to prior selections, and keeps difficulty accessible', () => {
+test('flat menu expands inline, searches every topic, and retains difficulty access', () => {
   const engine = new GameEngine(undefined, { clock });
-  engine.handleInput('r'); engine.handleInput('\n');
-  assert.equal(courseEntries(engine.state)[engine.state.course!.cursor.row]!.id, 'basic-movement');
+  engine.handleInput('r');
+  assert.equal(courseEntries(engine.state).filter(entry => entry.kind === 'topic').length, courseTopics.length);
+  assert.ok(!courseEntries(engine.state).some(entry => ['heading', 'section'].includes(entry.kind)));
   searchMenu(engine, 'Find a character');
-  engine.handleInput('j'); engine.handleInput('\n'); // practice
-  engine.handleInput('escape'); engine.handleInput('k'); engine.handleInput('\n'); // examples
+  const row = engine.state.course!.cursor.row;
+  assert.equal(engine.state.course?.view, 'sections');
+  assert.ok(engine.state.course?.expandedTopics?.includes('character-find'));
+  engine.handleInput('j'); engine.handleInput('\n'); // examples inline
   engine.handleInput('escape');
-  assert.equal(engine.state.course?.cursor.row, 0);
-  engine.handleInput('escape');
+  assert.equal(engine.state.course?.cursor.row, row + 1);
+  engine.handleInput('k'); engine.handleInput(' '); // collapse
+  assert.ok(!engine.state.course?.expandedTopics?.includes('character-find'));
   assert.equal(courseEntries(engine.state)[engine.state.course!.cursor.row]!.id, 'character-find');
-  engine.handleInput('escape');
   searchMenu(engine, 'Set difficulty');
   assert.equal(engine.state.phase, 'difficulty');
   engine.handleInput('j');
   assert.equal(engine.handleInput('\n').persist, true);
   assert.equal(engine.state.progress.difficulty, 'hard');
   assert.equal(engine.state.phase, 'course');
+});
+
+test('every topic practice clears 60 or more interleaved goals and covers its whole command group', () => {
+  for (const topic of courseTopics) {
+    const lesson = createTopicPractice(topic, [...navigationCommands, ...courseTopics.map(previous => `topic:${previous.id}`)]);
+    assert.ok(lesson.goals!.length >= 60);
+    assert.ok(lesson.goals!.filter(goal => goal.focus).length >= Math.ceil(lesson.goals!.length / 3));
+    for (const example of topic.examples) assert.ok(lesson.goals!.some(goal => goal.focus && goal.keys.join('').startsWith(example.keys.join(''))));
+    let game = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
+      edit: lesson.editing ? newEdit(lesson.lines) : null,
+      course: { ...newCourseState(), topicId: topic.id, practiceId: lesson.id } };
+    for (const [index, goal] of lesson.goals!.entries()) {
+      for (const key of goal.keys) game = play(game, key, 1000 + index * 100) as typeof game;
+      assert.equal(game.checkpoint, index + 1, `${topic.id}: goal ${index + 1}`);
+      assert.equal(game.phase, index === lesson.goals!.length - 1 ? 'reward' : 'play', topic.id);
+    }
+    assert.equal(game.checkpointScores.length, lesson.goals!.length);
+    assert.equal(game.progress.attempts[`normal:${lesson.id}`]?.length, 1);
+  }
+});
+
+test('review includes every earned movement badge and keeps editing command contexts distinct', () => {
+  const topic = courseTopics.find(topic => topic.id === 'WORD-movement')!;
+  const lesson = createTopicPractice(topic, ['f', 'F', 't', 'T', ';', ',', '/', '?', 'n', 'N', '%', 'Counts', 'topic:open-lines']);
+  const review = lesson.goals!.filter(goal => !goal.focus);
+  const commands = new Set(review.flatMap(goal => [...goal.requiredCommands]));
+  for (const key of ['f', 'F', 't', 'T', ';', ',', '/', '?', 'n', 'N', '%', 'Counts', 'o', 'O']) assert.ok(commands.has(key), key);
+  assert.ok(review.every(goal => !goal.instruction.includes('Visual')));
+  const targets = new Set(lesson.goals!.filter(goal => goal.focus).map(goal => JSON.stringify([goal.start, goal.target])));
+  assert.ok(targets.size > topic.examples.length);
+});
+
+test('WORD practice includes h j k l, w e b, and enforces the focus command per goal', () => {
+  const topic = courseTopics.find(topic => topic.id === 'WORD-movement')!;
+  const lesson = createTopicPractice(topic);
+  const commands = new Set(lesson.goals!.flatMap(goal => [...goal.requiredCommands]));
+  for (const key of ['h', 'j', 'k', 'l', 'w', 'e', 'b', 'W', 'E', 'B']) assert.ok(commands.has(key), key);
+  let game = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
+    course: { ...newCourseState(), topicId: topic.id, practiceId: lesson.id } };
+  for (let index = 0; index < 8; index++) game = play(game, 'l', 1000) as typeof game;
+  assert.equal(game.checkpoint, 0);
+  assert.match(game.message, /Use these commands.*W/);
+});
+
+test('expanded menu and mixed editing/navigation goals fit narrow and wide terminals', () => {
+  const renderer = new GameRenderer();
+  const menu = { ...newGame(), phase: 'course' as const, course: {
+    ...newCourseState(), expandedTopics: courseTopics.map(topic => topic.id),
+  } };
+  const topic = courseTopics.find(topic => topic.id === 'small-edits')!;
+  const lesson = createTopicPractice(topic);
+  let practice = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
+    edit: newEdit(lesson.lines), course: { ...newCourseState(), topicId: topic.id, practiceId: lesson.id } };
+  const scenes = [menu, practice];
+  for (const key of lesson.goals![0]!.keys) practice = play(practice, key, 1000) as typeof practice;
+  scenes.push(practice);
+  for (const scene of scenes) for (const [width, height] of [[22, 16], [32, 24], [80, 40]]) {
+    const lines = renderer.render(scene, width!, height!, 1000);
+    assert.equal(lines.length, height);
+    assert.ok(lines.every(line => visibleWidth(line) <= width!));
+  }
 });
 
 function motionSequence(lines: string[], start: { row: number; col: number }, keys: string) {

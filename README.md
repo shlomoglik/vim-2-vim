@@ -9,15 +9,17 @@ npm install
 npm start
 ```
 
-Press `R` to browse the course or `S` to start over. Starting over resets lesson unlocks and badges while preserving every attempt. The menu groups lessons into Movement, Insertion, Editing, Text objects, and Visual mode. Choose a section, then a topic. Each topic lists worked **Examples** before **Practice**. Examples animate automatically; press Enter to step ahead, `h`/`l` to switch examples, `r` to replay, and `p` to open its practices. Escape returns to the previous menu. Stats and Difficulty are available from the section menu. The timer starts on the first practice keystroke. Press **F1** for a free hint and Ctrl+C to quit. The editor scrolls vertically and horizontally to follow the cursor and target.
+Press `R` to browse the course or `S` to start over. Starting over resets badges while preserving every attempt. Every topic appears in one flat list, labeled with its section (Movement, Insertion, Editing, Text objects, or Visual mode). Press Enter or Space to expand/collapse its Examples and Practice actions; press `p` on a topic to start practice directly. Use `j`/`k` to move and `/` to search all topics. Examples animate automatically; Enter steps ahead, `h`/`l` switches examples, `r` replays, and `p` starts the mixed practice. Escape returns to the lesson list. Stats and Difficulty are available in the same list. The timer starts on the first practice keystroke. Press **F1** for a free hint and Ctrl+C to quit. The editor scrolls vertically and horizontally to follow the cursor and target.
 
 ## Course
 
-Command practices earn `w`, `b`, `e`, `0`, `$`, `^`, `gg`, `G`, Counts, `f`, `F`, `t`, `T`, `;`, `,`, `/`, `?`, `n`, `N`, and `%`. Four reviews revisit earlier commands without awarding a badge. The Navigator challenge requires successful use of all 20 commands before it awards Navigator; its remaining commands appear during play. The grouped course also includes additional worked examples and focused practices. A count such as `10j` or `12G` includes each digit in the score. For character finds, type the command and target character, such as `fa`. Searches use literal, case-sensitive text and Enter, such as `/star↵` or `?star↵`; they wrap through the buffer.
+Each topic has one mixed practice with **at least 60 goals**. Half focus on all commands in the topic, interleaved with basic movement and previously earned commands. Sessions grow when needed to include every review command. Word movement combines `w/e/b` with `h/j/k/l`; WORD movement combines `W/E/B`, `w/e/b`, and `h/j/k/l`. Navigation goals vary their starting positions. Each goal requires its listed commands, shown beside **USE**, and completing the whole session earns the topic's command badges. Editing goals also require the correct buffer saved with `:w`. One attempt records the entire session, including per-goal scores and commands used.
 
-Insertion and Editing cover `i/a`, `I/A`, `o/O`, Escape, `s/x/r`, `dw/de`, `cw/ce`, `dd/D/cc/C`, `dj/dk`, `yy/p/P`, and undo/redo. Text objects cover words, WORDS, quotes, brackets, and paragraphs. Visual mode covers character and line selections, changing selection ends, and deleting, changing, or yanking selections. Use navigation to reach each repair. A dim green suggestion shows one target at a time. The status line shows the practice filename and modified or saved state. `:w` saves the buffer within the exercise. Editing stages complete when the saved file exactly matches the target, regardless of which commands were used; used commands are kept with each attempt for Stats.
+A count such as `10j` or `12G` includes each digit in the score. For character finds, type the command and target character, such as `fa`. Searches use literal, case-sensitive text and Enter, such as `/star↵` or `?star↵`; they wrap through the buffer.
 
-Each navigation checkpoint has an authored reference route, replayed through the same command interpreter as player input. Accuracy compares the route's keystroke count with yours. Speed uses a par of 250 ms per reference key; proficiency averages speed and accuracy. Scores are feedback for replay; completing the stage unlocks the next one.
+Insertion and Editing cover `i/a`, `I/A`, `o/O`, Escape, `s/x/r`, `dw/de`, `cw/ce`, `dd/D/cc/C`, `dj/dk`, `yy/p/P`, and undo/redo. Text objects cover words, WORDS, quotes, brackets, and paragraphs. Visual mode covers character and line selections, changing selection ends, and deleting, changing, or yanking selections. Use navigation to reach each repair. A dim green suggestion shows one target at a time. The status line shows the practice filename and modified or saved state. `:w` saves the buffer within the exercise. Each editing goal completes when its required commands have been used and the saved file exactly matches the target. Used commands are kept with each attempt for Stats.
+
+Each navigation checkpoint has an authored reference route, replayed through the same command interpreter as player input. Accuracy compares the route's keystroke count with yours. Speed uses a par of 250 ms per reference key; proficiency averages speed and accuracy. Scores are feedback for replay; topics can be practiced in any order.
 
 Progress saves to `~/.local/state/vim-to-vim/progress.json`, or `$XDG_STATE_HOME/vim-to-vim/progress.json`. Set `VIM_TO_VIM_PROGRESS_FILE` to use another path. Stats keeps every historical attempt, including records from older saves. Proficiency changes are shown only for attempts using the same scoring version.
 
@@ -37,7 +39,7 @@ The application composes a stateful game engine with terminal, rendering, and fi
 | `src/game/GameEngine.ts` | Own the session and route input by phase; accept a clock and lesson catalog |
 | `src/game/` | Session setup, menu navigation, play, completion, scores, and state types |
 | `src/course/sections/` | Grouped lessons, examples, command lists, and links to original practices |
-| `src/course/browser.ts` | Section, lesson, example, and practice navigation |
+| `src/course/browser.ts` | Flat expandable lesson list, examples, and direct practice navigation |
 | `src/lessons/definitions/` | One authoring module per lesson |
 | `src/lessons/LessonCatalog.ts` | Register and create lessons by stable course ID |
 | `src/lessons/catalog.ts` | Course order, displayed keys, badges, and legacy save IDs |
@@ -52,7 +54,7 @@ Scoring and time constants live in `src/game/constants.ts`; terminal dimensions 
 
 Edit the corresponding section in `src/course/sections/`: `movement.ts`, `insertion.ts`, `editing.ts`, `textObjects.ts`, or `visual.ts`. Each topic declares its title, subgroup, commands, examples, and optional `legacyPractices` linking to existing exercises. These modules follow the supplied VimHero lesson grouping.
 
-The `motion` helper authors a navigation example with a buffer, starting cursor, and key sequence. The `repair` helper authors an editing example with an independently specified target buffer. `topic` groups them into a lesson. Each example becomes a focused practice automatically, with its own stable attempt ID; editing practices require `:w` to finish. The original exercises retain their IDs, difficulty routes, scores, and saved history.
+The `motion` helper authors a navigation example with a buffer, starting cursor, and key sequence. The `repair` helper authors an editing example with an independently specified target buffer. `topic` groups them into a lesson. The examples supply focused goals for a mixed practice, with one stable attempt ID per topic; completed topics and earned badges supply review goals. Editing goals require `:w` to finish. The original exercises retain their IDs, difficulty routes, scores, and saved history.
 
 ```ts
 topic('change-words', 'Change words', 'Characters & words', [
@@ -65,7 +67,7 @@ topic('change-words', 'Change words', 'Characters & words', [
 
 Use `\x1b` in an authored sequence for Escape. Keep topic and example IDs stable to preserve saved attempts. Worked examples loop automatically, support stepping and replay, and never affect scores or saved progress. In Normal mode, Escape returns from a practice; in Insert or Visual mode, it first leaves that mode.
 
-The course is freely browsable. Original staged unlocks and badge history remain compatible with older saves. Stats includes original and focused practices, with separate difficulty histories. The embedded editor implements the taught command subset; half-page movement uses ten practice rows.
+The course is freely browsable. Original staged unlocks and badge history remain compatible with older saves. Stats includes mixed sessions and historical original/focused practices, with separate difficulty histories. The embedded editor implements the taught command subset; half-page movement uses ten practice rows.
 
 ## Editing original practices
 

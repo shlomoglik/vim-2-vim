@@ -12,15 +12,20 @@ export const courseTopics = courseSections.flatMap(section => [...section.topics
 export const sectionFor = (id: string | null) => courseSections.find(section => section.id === id);
 export const topicFor = (id: string | null) => courseTopics.find(topic => topic.id === id);
 export const examplePracticeId = (topic: CourseTopic, example: CourseExample): string => `course:${topic.id}:${example.id}`;
+export const topicPracticeId = (topic: CourseTopic): string => `course:${topic.id}:mixed`;
 export const topicPracticeIds = (topic: CourseTopic): string[] => [
-  ...(topic.legacyPractices ?? []), ...topic.examples.map(example => examplePracticeId(topic, example)),
+  topicPracticeId(topic),
 ];
-export const extraPracticeIds = new Set(courseTopics.flatMap(topic => topic.examples.map(example => examplePracticeId(topic, example))));
+export const extraPracticeIds = new Set(courseTopics.flatMap(topic => [topicPracticeId(topic), ...topic.examples.map(example => examplePracticeId(topic, example))]));
 export const navigationCommands = ['h', 'j', 'k', 'l', 'w', 'e', 'b', 'W', 'E', 'B', '0', '^', '_', '$', 'gg', 'G', 'Counts', 'f', 'F', 't', 'T', ';', ',', '/', '?', 'n', 'N', '*', '#', '{', '}', '%', '\x04', '\x15'] as const;
 
-export const coursePracticeIds = [...new Set(courseTopics.flatMap(topicPracticeIds))];
+export const coursePracticeIds = [...new Set([
+  ...courseTopics.flatMap(topicPracticeIds), ...stageIds,
+  ...courseTopics.flatMap(topic => topic.examples.map(example => examplePracticeId(topic, example))),
+])];
 export function practiceTitle(id: string): string {
   for (const topic of courseTopics) {
+    if (topicPracticeId(topic) === id) return `${topic.title}: mixed practice`;
     const example = topic.examples.find(example => examplePracticeId(topic, example) === id);
     if (example) return `${topic.title}: ${example.command}`;
   }

@@ -1,4 +1,5 @@
-import { createExamplePractice, extraPractices } from '../course/practices.js';
+import { createExamplePractice, createTopicPractice, extraPractices } from '../course/practices.js';
+import { courseTopics, topicPracticeId } from '../course/curriculum.js';
 import type { Motion } from '../vim/motion.js';
 import { advancedLesson } from './advanced.js';
 import { legacyIds, stageBadge, stageIds } from './catalog.js';
@@ -32,7 +33,9 @@ export class LessonCatalog {
     for (const id of stageIds.filter(id => id.startsWith('edit-'))) this.register(id, editingLesson);
   }
 
-  createById(id: string, difficulty: Difficulty, unlocked: readonly Motion[]): Lesson {
+  createById(id: string, difficulty: Difficulty, unlocked: readonly Motion[], earned: readonly string[] = unlocked): Lesson {
+    const topic = courseTopics.find(topic => topicPracticeId(topic) === id);
+    if (topic) return createTopicPractice(topic, earned);
     const index = stageIds.indexOf(id as typeof stageIds[number]);
     if (index >= 0) return this.create(index, difficulty, unlocked);
     const practice = extraPractices.get(id);

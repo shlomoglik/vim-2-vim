@@ -20,7 +20,7 @@ export type CourseTopic = {
   legacyPractices?: readonly string[];
 };
 export type CourseSection = { id: string; title: string; topics: readonly CourseTopic[] };
-export type CourseView = 'sections' | 'topics' | 'lesson' | 'examples' | 'practice';
+export type CourseView = 'sections' | 'examples';
 export type DemoState = { index: number; step: number; cursor: Position; command: CommandState; edit: EditState | null; message: string; startedAtMs: number };
 export type CourseState = {
   view: CourseView;
@@ -30,4 +30,5 @@ export type CourseState = {
   demo: DemoState | null;
   practiceId: string | null;
   cursors: Partial<Record<CourseView, Position>>;
+  expandedTopics?: string[];
 };

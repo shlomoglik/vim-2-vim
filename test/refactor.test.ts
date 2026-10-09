@@ -41,35 +41,27 @@ test('hub actions stay pinned while lessons scroll at every supported layout', (
 
 const clock = { now: () => 1000, timestamp: () => '2026-01-01T00:00:00.000Z' };
 
-test('grouped course opens examples before practice and keeps them in the menu', () => {
+test('flat course expands examples and practice without leaving the lesson list', () => {
   const engine = new GameEngine(undefined, { clock });
   engine.handleInput('r');
-  assert.equal(engine.state.phase, 'course');
+  engine.handleInput('\n'); // expand Basic movement
   assert.equal(engine.state.course?.view, 'sections');
-  engine.handleInput('\n'); // Movement
-  assert.equal(engine.state.course?.view, 'topics');
-  engine.handleInput('\n'); // Basic movement
-  assert.equal(engine.state.course?.view, 'lesson');
-  const lessonScreen = new GameRenderer().render(engine.state, 80, 30, 1000).join('\n');
-  assert.ok(lessonScreen.indexOf('Examples') < lessonScreen.indexOf('Practice'));
-  engine.handleInput('\n'); // Examples
+  const screen = new GameRenderer().render(engine.state, 80, 30, 1000).join('\n');
+  assert.ok(screen.indexOf('Examples') < screen.indexOf('Practice'));
+  engine.handleInput('j'); engine.handleInput('\n');
   assert.equal(engine.state.course?.view, 'examples');
-  assert.match(new GameRenderer().render(engine.state, 80, 30, 1000).join('\n'), /Move one character left/);
-  engine.handleInput('\n'); // Step through the example
+  engine.handleInput('\n');
   assert.equal(engine.state.course?.demo?.step, 1);
   engine.handleInput('escape');
-  assert.equal(engine.state.course?.view, 'lesson');
-  engine.handleInput('\n'); // Examples remain reachable
+  assert.equal(engine.state.course?.view, 'sections');
+  engine.handleInput('\n');
   assert.equal(engine.state.course?.view, 'examples');
   engine.handleInput('p');
-  assert.equal(engine.state.course?.view, 'practice');
-  engine.handleInput('\n'); // Existing direction practice
   assert.equal(engine.state.phase, 'play');
-  for (const route of engine.state.activeLesson!.referenceRoutes) for (const key of route) engine.handleInput(key);
+  for (const goal of engine.state.activeLesson!.goals!) for (const key of goal.keys) engine.handleInput(key);
   assert.equal(engine.state.phase, 'reward');
-  assert.doesNotMatch(new GameRenderer().render(engine.state, 80, 30, 1000).join('\n'), /HOW TO USE/);
   engine.handleInput('\n');
-  assert.equal(engine.state.course?.view, 'practice');
+  assert.equal(engine.state.course?.view, 'sections');
 });
 
 test('engine completes the navigation course through input and emits save effects once per completion', () => {

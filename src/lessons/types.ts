@@ -13,6 +13,14 @@ export type Lesson = {
   id: string;
   requiredCommands?: readonly string[];
   editing?: { filename: string; expected: readonly string[]; requireSave: boolean };
+  goals?: readonly PracticeGoal[];
+};
+
+export type PracticeGoal = Pick<Lesson, 'lines' | 'start' | 'instruction' | 'hint' | 'editing'> & {
+  target: Position;
+  keys: readonly string[];
+  requiredCommands: readonly string[];
+  focus: boolean;
 };
 
 

@@ -1,4 +1,5 @@
 import { returnToPractice } from '../course/browser.js';
+import { topicFor, topicPracticeId } from '../course/curriculum.js';
 import { stageIds } from '../lessons/catalog.js';
 import { earnedBadges, LESSON_COUNT, NAVIGATION_COUNT } from '../lessons/index.js';
 import { type LessonResult } from './scoring.js';
@@ -10,7 +11,9 @@ export function finishLesson(game: Game, result: LessonResult, nowMs: number, ti
   const recordKey = game.course?.practiceId ? `${game.progress.difficulty}:${game.course.practiceId}` : resultKey(game.progress.difficulty, game.lesson);
   const attempt: Attempt = { ...result, completedAt: timestamp(), scoringVersion: SCORING_VERSION,
     commandsUsed: [...new Set(game.usedCommands)] };
-  const progress: Progress = { ...game.progress, completed, badges: [...new Set([...game.progress.badges, ...earnedBadges(completed)])],
+  const topic = topicFor(game.course?.topicId ?? null);
+  const topicBadges = topic && game.course?.practiceId === topicPracticeId(topic) ? topic.commands : [];
+  const progress: Progress = { ...game.progress, completed, badges: [...new Set([...game.progress.badges, ...earnedBadges(completed), ...topicBadges])],
     results: { ...game.progress.results, [recordKey]: result },
     attempts: { ...game.progress.attempts, [recordKey]: [...(game.progress.attempts[recordKey] ?? []), attempt] } };
   return { ...game, progress, phase: 'reward', newUnlock, message: '', lastHitAtMs: nowMs };

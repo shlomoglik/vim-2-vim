@@ -86,7 +86,7 @@ export class GameRenderer {
       top = [...masthead, cyan(`STATS · ${game.progress.difficulty.toUpperCase()}`),
         practice ? cyan(truncateToWidth(title, width)) : `${gold(`LESSON ${game.lesson + 1}/${LESSON_COUNT}`)} ${faint(title)}`,
         `${faint('BADGES')} ${badgeDisplay(game.progress.badges, width)}`];
-      bottom = [faint('h/l lesson · j/k history'), keycap('↵', game.course ? 'Back to sections' : 'Back to hub')];
+      bottom = [faint('h/l lesson · j/k history'), keycap('↵', game.course ? 'Back to lessons' : 'Back to hub')];
       middle = statsBody(game, width, height - top.length - bottom.length);
     } else {
       const lesson = game.activeLesson!;
@@ -96,6 +96,8 @@ export class GameRenderer {
       top = [...masthead, ...(game.course?.practiceId ? [cyan(truncateToWidth(lessonName, width))] : [`${cyan(`STAGE ${String(game.lesson + 1).padStart(2, '0')}`)} ${faint(`/ ${String(LESSON_COUNT).padStart(2, '0')}`)}${width >= BOX_MIN_WIDTH ? ` ${pink(lessonName)}` : ''}`,
         ...(width < BOX_MIN_WIDTH ? [pink(lessonName)] : [])]),
         ...wrapTextWithAnsi(instruction, width),
+        ...(lesson.goals ? [gold(`GOAL ${game.checkpoint + 1}/${lesson.goals.length}`)] : []),
+        ...(lesson.goals ? wrapTextWithAnsi(`${gold('USE')} ${lesson.goals[game.checkpoint]!.requiredCommands.join(' ')}`, width) : []),
         ...(lesson.editing ? wrapTextWithAnsi(`${gold('FILE')} ${game.edit?.lines.join('\n') !== game.edit?.savedLines.join('\n') ? '[+]' : game.edit?.saved ? 'saved' : ''} ${lesson.editing.filename}`, width) :
         [`${gold('TARGET')} ${game.checkpoint + 1}/${lesson.checkpoints.length} ${faint(`@ ${goal.row + 1}:${goal.col + 1}`)}${width >= WIDE_VIEW_WIDTH ? ` ${dots(game.checkpoint, lesson.checkpoints.length)}` : ''}`]),
         ...(lesson.editing ? wrapTextWithAnsi(`${gold('TARGET')} ${editingMismatch(game.edit!.lines, lesson.editing.expected) ?? 'Match reached. Save with :w.'}`, width) :
