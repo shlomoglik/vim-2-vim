@@ -6,7 +6,7 @@ import { BOX_MIN_WIDTH, PANEL_WIDTH } from '../constants.js';
 import { viewportStart } from '../layout.js';
 import { cyan, paint } from '../styles.js';
 
-export function selectorPanel(options: readonly string[], cursor: Position, width: number, filename: string, visibleRows: number, pending = '', unlockedThrough?: number): string[] {
+export function selectorPanel(options: readonly string[], cursor: Position, width: number, filename: string, visibleRows: number, pending = '', unlockedThrough?: number, pinnedRows = 0): string[] {
   const boxed = width >= BOX_MIN_WIDTH;
   const panelWidth = boxed ? Math.min(width, PANEL_WIDTH) : width;
   const contentWidth = panelWidth - (boxed ? 2 : 0);
@@ -14,9 +14,14 @@ export function selectorPanel(options: readonly string[], cursor: Position, widt
   const textWidth = contentWidth - gutterWidth;
   const base = '\x1b[0;48;5;236;38;5;253m';
   const ghost = '\x1b[0;48;5;236;38;5;241m';
-  const firstRow = viewportStart(options.length, visibleRows, cursor.row);
-  const rows = Array.from({ length: visibleRows }, (_, offset) => {
-    const row = firstRow + offset;
+  const scrollingCount = options.length - pinnedRows;
+  const scrollingRows = Math.max(1, visibleRows - pinnedRows);
+  const firstRow = viewportStart(scrollingCount, scrollingRows, Math.min(cursor.row, scrollingCount - 1));
+  const rowIndices = [
+    ...Array.from({ length: scrollingRows }, (_, offset) => firstRow + offset < scrollingCount ? firstRow + offset : -1),
+    ...Array.from({ length: pinnedRows }, (_, offset) => scrollingCount + offset),
+  ];
+  const rows = rowIndices.map(row => {
     const source = options[row];
     if (source === undefined) return `\x1b[48;5;234;38;5;245m${boxed ? '~  │   ' : '~ │  '}${base}${' '.repeat(textWidth)}\x1b[0m`;
     const locked = unlockedThrough !== undefined && row < LESSON_COUNT && row > unlockedThrough;

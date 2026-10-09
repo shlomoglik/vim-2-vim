@@ -75,7 +75,7 @@ export class GameRenderer {
       const budget = height - top.length - bottom.length - note.length;
       const visibleRows = Math.max(1, budget - (width >= BOX_MIN_WIDTH ? 4 : 1));
       middle = [...selectorPanel(options, cursor, width, selectingDifficulty ? 'difficulty.txt' : 'course.txt', visibleRows, game.command.pending,
-        selectingDifficulty ? undefined : game.progress.completed), ...note];
+        selectingDifficulty ? undefined : game.progress.completed, selectingDifficulty ? 0 : 2), ...note];
     } else if (game.phase === 'stats') {
       const title = hubLines[game.lesson]!;
       top = [...masthead, cyan(`STATS · ${game.progress.difficulty.toUpperCase()}`),

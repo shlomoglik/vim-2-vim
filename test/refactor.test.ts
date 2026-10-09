@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { GameEngine } from '../src/game/GameEngine.js';
-import { blankProgress,resultKey } from '../src/game/state.js';
-import { LessonCatalog,NAVIGATION_COUNT,difficulties,earnedBadges,lessonFor } from '../src/lessons/index.js';
+import { blankProgress,newGame,resultKey } from '../src/game/state.js';
+import { LESSON_COUNT,LessonCatalog,NAVIGATION_COUNT,difficulties,earnedBadges,lessonFor } from '../src/lessons/index.js';
+import { GameRenderer } from '../src/ui/GameRenderer.js';
 import { Screen } from '../src/ui/Screen.js';
 import { captureBaseline,type Baseline } from './helpers/baseline.js';
 
@@ -14,8 +15,28 @@ test('all authored lessons match their pre-refactor definitions at every difficu
   assert.deepEqual(current.lessons, baseline.lessons);
 });
 
-test('screens match pre-refactor output across phases and terminal sizes', () => {
+test('screens match approved output across phases and terminal sizes', () => {
   assert.deepEqual(current.screens, baseline.screens);
+});
+
+test('hub actions stay pinned while lessons scroll at every supported layout', () => {
+  const renderer = new GameRenderer();
+  for (const [width, height] of [[22, 16], [32, 16], [46, 24], [80, 40], [80, 60]]) {
+    let actionPositions: number[] | undefined;
+    for (const row of [0, 15, LESSON_COUNT - 1, LESSON_COUNT, LESSON_COUNT + 1]) {
+      const game = { ...newGame(), phase: 'hub' as const, hubCursor: { row, col: 0 } };
+      const rendered = renderer.render(game, width!, height!, 1000);
+      const plain = rendered.map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+      const positions = ['View stats', 'Set difficulty'].map(label => plain.findIndex(line => line.includes(label)));
+      assert.ok(positions.every(position => position >= 0), `${width}x${height}: row ${row}`);
+      assert.equal(positions[1], positions[0]! + 1);
+      if (actionPositions) assert.deepEqual(positions, actionPositions);
+      actionPositions = positions;
+      if (row >= LESSON_COUNT) {
+        assert.ok(rendered[positions[row - LESSON_COUNT]!]!.includes('\x1b[38;5;240;48;5;255m'));
+      }
+    }
+  }
 });
 
 const clock = { now: () => 1000, timestamp: () => '2026-01-01T00:00:00.000Z' };
