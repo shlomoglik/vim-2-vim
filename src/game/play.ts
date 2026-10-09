@@ -1,3 +1,4 @@
+import { navigationCommands } from '../course/curriculum.js';
 import { stageBadge } from '../lessons/index.js';
 import { interpret } from '../vim/command.js';
 import { editKey } from '../vim/editing.js';
@@ -10,7 +11,7 @@ export function play(game: Game, key: string, nowMs = performance.now(), timesta
   if (key === 'f1') return { ...game, hint: !game.hint, message: '' };
   const lesson = game.activeLesson;
   if (lesson.editing && game.edit) {
-    const outcome = editKey(game.edit, game.cursor, key, unlockedCommands(game.progress));
+    const outcome = editKey(game.edit, game.cursor, key, game.course?.practiceId ? navigationCommands : unlockedCommands(game.progress));
     const timed = { ...game, edit: outcome.edit, cursor: outcome.cursor, message: outcome.message,
       startedAtMs: game.startedAtMs ?? nowMs, keysThisCheckpoint: game.keysThisCheckpoint + 1, usedCommands: outcome.edit.used };
     const correct = outcome.edit.lines.length === lesson.editing.expected.length && outcome.edit.lines.every((line, row) => line === lesson.editing!.expected[row]);
@@ -20,7 +21,7 @@ export function play(game: Game, key: string, nowMs = performance.now(), timesta
   }
   const timed = { ...game, startedAtMs: game.startedAtMs ?? nowMs,
     checkpointAtMs: game.checkpointAtMs ?? nowMs, keysThisCheckpoint: game.keysThisCheckpoint + 1 };
-  const outcome = interpret(lesson.lines, game.cursor, game.command, key, [...unlockedCommands(game.progress), stageBadge(game.lesson) ?? '']);
+  const outcome = interpret(lesson.lines, game.cursor, game.command, key, game.course?.practiceId ? navigationCommands : [...unlockedCommands(game.progress), stageBadge(game.lesson) ?? '']);
   const cursor = outcome.cursor;
   timed.command = outcome.state;
   timed.usedCommands = outcome.executed ? [...game.usedCommands, outcome.executed] : game.usedCommands;

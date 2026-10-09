@@ -1,4 +1,5 @@
 import type { Game } from '../game/state.js';
+import { DEMO_STEP_MS } from '../course/demo.js';
 import { cursorShade, ghostFrame, rewardShine, targetPulse } from './animation.js';
 import { CHECKPOINT_FLASH_MS } from './constants.js';
 import { guideStep } from './motionGuide.js';
@@ -10,6 +11,7 @@ export class AnimationController {
   private previousGhostFrame: number;
   private previousGuideStep: 0 | 1 | 2 = 0;
   private previousRewardShine = false;
+  private previousDemoFrame = -1;
 
   constructor(nowMs: number) {
     this.previousCursorShade = cursorShade(nowMs);
@@ -25,13 +27,17 @@ export class AnimationController {
     const currentGuideStep = guideStep(age);
     const shining = rewardShine(age);
     const flashActive = game.phase === 'play' && game.lastHitAtMs !== null && age < CHECKPOINT_FLASH_MS;
+    const demoFrame = game.phase === 'course' && game.course?.view === 'examples' && game.course.demo ?
+      Math.floor(Math.max(0, nowMs - game.course.demo.startedAtMs) / DEMO_STEP_MS) : -1;
     const changed = game.phase === 'reward' && (currentGuideStep !== this.previousGuideStep || shade !== this.previousCursorShade || shining !== this.previousRewardShine) ||
-      game.phase === 'play' && (game.startedAtMs !== null || shade !== this.previousCursorShade || pulse !== this.previousTargetPulse || game.edit !== null && ghostStep !== this.previousGhostFrame) || flashActive;
+      game.phase === 'play' && (game.startedAtMs !== null || shade !== this.previousCursorShade || pulse !== this.previousTargetPulse || game.edit !== null && ghostStep !== this.previousGhostFrame) ||
+      demoFrame !== -1 && demoFrame !== this.previousDemoFrame || flashActive;
     this.previousCursorShade = shade;
     this.previousTargetPulse = pulse;
     this.previousGhostFrame = ghostStep;
     this.previousGuideStep = currentGuideStep;
     this.previousRewardShine = shining;
+    this.previousDemoFrame = demoFrame;
     return changed;
   }
 }

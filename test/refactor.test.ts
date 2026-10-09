@@ -41,9 +41,40 @@ test('hub actions stay pinned while lessons scroll at every supported layout', (
 
 const clock = { now: () => 1000, timestamp: () => '2026-01-01T00:00:00.000Z' };
 
+test('grouped course opens examples before practice and keeps them in the menu', () => {
+  const engine = new GameEngine(undefined, { clock });
+  engine.handleInput('r');
+  assert.equal(engine.state.phase, 'course');
+  assert.equal(engine.state.course?.view, 'sections');
+  engine.handleInput('\n'); // Movement
+  assert.equal(engine.state.course?.view, 'topics');
+  engine.handleInput('\n'); // Basic movement
+  assert.equal(engine.state.course?.view, 'lesson');
+  const lessonScreen = new GameRenderer().render(engine.state, 80, 30, 1000).join('\n');
+  assert.ok(lessonScreen.indexOf('Examples') < lessonScreen.indexOf('Practice'));
+  engine.handleInput('\n'); // Examples
+  assert.equal(engine.state.course?.view, 'examples');
+  assert.match(new GameRenderer().render(engine.state, 80, 30, 1000).join('\n'), /Move one character left/);
+  engine.handleInput('\n'); // Step through the example
+  assert.equal(engine.state.course?.demo?.step, 1);
+  engine.handleInput('escape');
+  assert.equal(engine.state.course?.view, 'lesson');
+  engine.handleInput('\n'); // Examples remain reachable
+  assert.equal(engine.state.course?.view, 'examples');
+  engine.handleInput('p');
+  assert.equal(engine.state.course?.view, 'practice');
+  engine.handleInput('\n'); // Existing direction practice
+  assert.equal(engine.state.phase, 'play');
+  for (const route of engine.state.activeLesson!.referenceRoutes) for (const key of route) engine.handleInput(key);
+  assert.equal(engine.state.phase, 'reward');
+  assert.doesNotMatch(new GameRenderer().render(engine.state, 80, 30, 1000).join('\n'), /HOW TO USE/);
+  engine.handleInput('\n');
+  assert.equal(engine.state.course?.view, 'practice');
+});
+
 test('engine completes the navigation course through input and emits save effects once per completion', () => {
   for (const difficulty of difficulties) {
-    const engine = new GameEngine({ ...blankProgress(), difficulty }, { clock });
+    const engine = new GameEngine({ ...blankProgress(), difficulty }, { clock, navigation: 'legacy' });
     assert.deepEqual(engine.handleInput('R'), { persist: false });
     for (let index = 0; index < NAVIGATION_COUNT; index++) {
       assert.equal(engine.handleInput('\n').persist, false);
@@ -61,7 +92,7 @@ test('engine completes the navigation course through input and emits save effect
     assert.equal(engine.state.phase, 'hub');
     const attempts = engine.state.progress.attempts;
     // Restart is available only from the initial menu, preserving all attempt records.
-    const restarted = new GameEngine(engine.state.progress, { clock });
+    const restarted = new GameEngine(engine.state.progress, { clock, navigation: 'legacy' });
     assert.equal(restarted.handleInput('s').persist, true);
     assert.equal(restarted.state.progress.completed, 0);
     assert.deepEqual(restarted.state.progress.attempts, attempts);
@@ -69,7 +100,7 @@ test('engine completes the navigation course through input and emits save effect
 });
 
 test('engine routes pending searches through Enter and saves difficulty changes', () => {
-  const engine = new GameEngine({ ...blankProgress(), completed: NAVIGATION_COUNT, badges: earnedBadges(NAVIGATION_COUNT) }, { clock });
+  const engine = new GameEngine({ ...blankProgress(), completed: NAVIGATION_COUNT, badges: earnedBadges(NAVIGATION_COUNT) }, { clock, navigation: 'legacy' });
   engine.handleInput('r');
   engine.handleInput('g'); engine.handleInput('g');
   for (const key of '/View\n') engine.handleInput(key);
@@ -85,7 +116,7 @@ test('engine routes pending searches through Enter and saves difficulty changes'
 });
 
 test('engine editing save uses injected clock and completes only after writing', () => {
-  const engine = new GameEngine({ ...blankProgress(), completed: NAVIGATION_COUNT, badges: earnedBadges(NAVIGATION_COUNT) }, { clock });
+  const engine = new GameEngine({ ...blankProgress(), completed: NAVIGATION_COUNT, badges: earnedBadges(NAVIGATION_COUNT) }, { clock, navigation: 'legacy' });
   engine.handleInput('r'); engine.handleInput('\n');
   for (const key of ['$', 'a', ...' Lovelace', 'escape']) assert.equal(engine.handleInput(key).persist, false);
   assert.equal(engine.state.phase, 'play');
@@ -100,14 +131,14 @@ test('a separate lesson catalog can customize a lesson without changing the defa
   const catalog = new LessonCatalog();
   const original = lessonFor(0, 'normal', ['h', 'j', 'k', 'l']);
   catalog.register('directions', () => ({ ...original, instruction: 'Custom instructions' }));
-  const engine = new GameEngine(undefined, { lessons: catalog, clock });
+  const engine = new GameEngine(undefined, { lessons: catalog, clock, navigation: 'legacy' });
   engine.handleInput('r'); engine.handleInput('\n');
   assert.equal(engine.state.activeLesson?.instruction, 'Custom instructions');
   assert.equal(lessonFor(0, 'normal', ['h', 'j', 'k', 'l']).instruction, original.instruction);
 });
 
 test('terminal screen gates undersized input and persists engine save effects', () => {
-  const engine = new GameEngine(undefined, { clock });
+  const engine = new GameEngine(undefined, { clock, navigation: 'legacy' });
   let saves = 0, renders = 0;
   const host = { columns: 21, rows: 16, requestRender: () => { renders++; } };
   const screen = new Screen(engine, host, () => { saves++; });

@@ -1,3 +1,4 @@
+import { isSelected } from '../../vim/ranges.js';
 import { truncateToWidth } from '@earendil-works/pi-tui';
 import { type Game } from '../../game/state.js';
 import { ghostColor } from '../animation.js';
@@ -54,9 +55,11 @@ export function editorPanel(game: Game, width: number, flashing: boolean, flashF
         const isWrong = actual !== undefined && col === wrongCol;
         const char = isWrong && actual === ' ' || suggested === ' ' ? '·' : actual ?? suggested ?? ' ';
         const isCursor = game.cursor.row === row && game.cursor.col === col;
+        const selected = game.edit && row !== null && row !== undefined && isSelected(lines, game.edit.selectionAnchor, game.cursor, game.edit.mode, { row, col });
         const isGoal = !lesson.editing && goal.row === row && goal.col === col;
         const isHit = flashing && game.lastHit?.row === row && game.lastHit.col === col;
         line += isCursor ? `${cursorInk}${char}${rowBase}` :
+          selected ? `\x1b[48;5;60;38;5;255m${char}${rowBase}` :
           isWrong ? `\x1b[1;38;5;211m${char}${rowBase}` :
           isGoal ? `\x1b[${pulse ? '1;92' : '32'}m${char}${rowBase}` :
           isHit ? `${flashFrame ? gold(char) : green(char)}${rowBase}` :

@@ -1,9 +1,10 @@
+const DEFAULT_HALF_PAGE_ROWS = 10;
 import { move, type Motion, type Position } from './motion.js';
 
 export type CommandState = {
   pending: string;
   lastFind: { command: 'f' | 'F' | 't' | 'T'; char: string } | null;
-  lastSearch: { text: string; direction: 1 | -1 } | null;
+  lastSearch: { text: string; direction: 1 | -1; wholeWord?: boolean } | null;
   preferredCol: number | null;
 };
 export const emptyCommand = (): CommandState => ({ pending: '', lastFind: null, lastSearch: null, preferredCol: null });
@@ -43,6 +44,17 @@ function search(lines: readonly string[], at: Position, query: string, direction
   }
   const prefix = text.slice(0, found).split('\n');
   return { row: prefix.length - 1, col: prefix.at(-1)!.length };
+}
+
+function wordSearch(lines: readonly string[], cursor: Position, word: string, direction: 1 | -1, count: number): Position | null {
+  const candidates = lines.flatMap((line, row) => [...line.matchAll(/[A-Za-z0-9_]+/g)].filter(match => match[0] === word).map(match => ({ row, col: match.index })));
+  if (!candidates.length) return null;
+  let at = cursor;
+  for (let step = 0; step < count; step++) {
+    const next = direction === 1 ? candidates.find(point => point.row > at.row || point.row === at.row && point.col > at.col) : [...candidates].reverse().find(point => point.row < at.row || point.row === at.row && point.col < at.col);
+    at = next ?? (direction === 1 ? candidates[0]! : candidates.at(-1)!);
+  }
+  return at;
 }
 
 function matching(lines: readonly string[], at: Position): Position {
@@ -121,6 +133,32 @@ export function interpret(lines: readonly string[], cursor: Position, state: Com
     const desired = state.preferredCol ?? cursor.col;
     return done({ row, col: Math.min(desired, lines[row]!.length - 1) }, { ...state, pending: '', preferredCol: desired }, '', digits ? 'Counts' : key);
   }
+  if (key === '_') {
+    const row = clamp(cursor.row + count - 1, lines.length - 1);
+    return done({ row, col: first(lines[row]!) }, undefined, '', digits ? 'Counts' : '_');
+  }
+  if (key === '{' || key === '}') {
+    let row = cursor.row;
+    const direction = key === '}' ? 1 : -1;
+    for (let step = 0; step < count; step++) {
+      row = clamp(row + direction, lines.length - 1);
+      while (row > 0 && row < lines.length - 1 && lines[row]!.trim()) row += direction;
+    }
+    return done({ row, col: 0 }, undefined, '', key);
+  }
+  if (key === '\x04' || key === '\x15') {
+    const row = clamp(cursor.row + (key === '\x04' ? 1 : -1) * count * DEFAULT_HALF_PAGE_ROWS, lines.length - 1);
+    return done({ row, col: Math.min(cursor.col, Math.max(0, lines[row]!.length - 1)) }, undefined, '', key === '\x04' ? 'Ctrl+d' : 'Ctrl+u');
+  }
+  if (key === '*' || key === '#') {
+    const line = lines[cursor.row]!;
+    const matches = [...line.matchAll(/[A-Za-z0-9_]+/g)];
+    const word = matches.find(match => match.index <= cursor.col && match.index + match[0].length > cursor.col) ?? matches.find(match => match.index >= cursor.col);
+    if (!word) return done(cursor, undefined, 'No word under cursor');
+    const direction = key === '*' ? 1 : -1;
+    const at = wordSearch(lines, cursor, word[0], direction, count)!;
+    return done(at, { ...state, pending: '', preferredCol: null, lastSearch: { text: word[0], direction, wholeWord: true } }, '', key);
+  }
   if (key === '^') return done({ row: cursor.row, col: first(lines[cursor.row]!) }, undefined, '', digits ? 'Counts' : key);
   if (key === '$') {
     if (count > 1 && cursor.row === lines.length - 1) return done(cursor, undefined, 'End of file');
@@ -141,7 +179,7 @@ export function interpret(lines: readonly string[], cursor: Position, state: Com
   if (key === 'n' || key === 'N') {
     if (!state.lastSearch) return done(cursor, undefined, 'No previous search');
     const direction = key === 'n' ? state.lastSearch.direction : state.lastSearch.direction === 1 ? -1 : 1;
-    const at = search(lines, cursor, state.lastSearch.text, direction, count);
+    const at = state.lastSearch.wholeWord ? wordSearch(lines, cursor, state.lastSearch.text, direction, count) : search(lines, cursor, state.lastSearch.text, direction, count);
     return done(at ?? cursor, undefined, at ? '' : 'Pattern not found', digits ? 'Counts' : key);
   }
   if (key === '%') {

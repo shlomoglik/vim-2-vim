@@ -1,4 +1,4 @@
-export type Motion = 'h' | 'j' | 'k' | 'l' | 'w' | 'b' | 'e' | '0' | '$' | '^' | 'gg' | 'G';
+export type Motion = 'h' | 'j' | 'k' | 'l' | 'w' | 'b' | 'e' | 'W' | 'B' | 'E' | '0' | '$' | '^' | 'gg' | 'G';
 export type Position = { row: number; col: number };
 
 const kind = (char: string): number => /[A-Za-z0-9_]/.test(char) ? 1 : /\s/.test(char) ? 0 : 2;
@@ -20,33 +20,34 @@ export function move(lines: readonly string[], from: Position, motion: Motion): 
     return { row: next, col: Math.min(col, lines[next]!.length - 1) };
   }
 
+  const wordKind = (char: string) => ['W', 'B', 'E'].includes(motion) ? /\s/.test(char) ? 0 : 1 : kind(char);
   const text = lines.join('\n');
   const offsets = lines.map((_, i) => lines.slice(0, i).reduce((n, line) => n + line.length + 1, 0));
   let index = offsets[row]! + col;
-  if (motion === 'w') {
+  if ((motion === 'w' || motion === 'W')) {
     if (index >= text.length - 1) return from;
-    const current = kind(text[index]!);
-    if (current !== 0) while (index < text.length && kind(text[index]!) === current) index++;
-    while (index < text.length && kind(text[index]!) === 0) index++;
+    const current = wordKind(text[index]!);
+    if (current !== 0) while (index < text.length && wordKind(text[index]!) === current) index++;
+    while (index < text.length && wordKind(text[index]!) === 0) index++;
     if (index >= text.length) return from;
-  } else if (motion === 'e') {
+  } else if ((motion === 'e' || motion === 'E')) {
     if (index >= text.length - 1) return from;
-    const current = kind(text[index]!);
-    if (current !== 0 && kind(text[index + 1]!) === current) {
-      while (index + 1 < text.length && kind(text[index + 1]!) === current) index++;
+    const current = wordKind(text[index]!);
+    if (current !== 0 && wordKind(text[index + 1]!) === current) {
+      while (index + 1 < text.length && wordKind(text[index + 1]!) === current) index++;
     } else {
       index++;
-      while (index < text.length && kind(text[index]!) === 0) index++;
+      while (index < text.length && wordKind(text[index]!) === 0) index++;
       if (index >= text.length) return from;
-      const nextKind = kind(text[index]!);
-      while (index + 1 < text.length && kind(text[index + 1]!) === nextKind) index++;
+      const nextKind = wordKind(text[index]!);
+      while (index + 1 < text.length && wordKind(text[index + 1]!) === nextKind) index++;
     }
   } else {
     if (index === 0) return from;
     index--;
-    while (index > 0 && kind(text[index]!) === 0) index--;
-    const targetKind = kind(text[index]!);
-    while (index > 0 && kind(text[index - 1]!) === targetKind) index--;
+    while (index > 0 && wordKind(text[index]!) === 0) index--;
+    const targetKind = wordKind(text[index]!);
+    while (index > 0 && wordKind(text[index - 1]!) === targetKind) index--;
   }
   let targetRow = 0;
   while (targetRow + 1 < offsets.length && offsets[targetRow + 1]! <= index) targetRow++;

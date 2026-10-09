@@ -1,3 +1,4 @@
+import { extraPracticeIds } from '../course/curriculum.js';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -25,7 +26,7 @@ function validAttempt(value: unknown): value is Attempt {
 }
 const validKey = (key: string) => {
   const match = /^(easy|normal|hard):(.+)$/.exec(key);
-  return !!match && stageIds.includes(match[2] as typeof stageIds[number]);
+  return !!match && (stageIds.includes(match[2] as typeof stageIds[number]) || extraPracticeIds.has(match[2]!));
 };
 
 export function progressPath(): string {

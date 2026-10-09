@@ -1,3 +1,4 @@
+import { coursePracticeIds, practiceTitle } from '../../course/curriculum.js';
 import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import { formatTime, previousComparableAttempt, scoreCourse } from '../../game/scoring.js';
 import { hubLines, resultKey, type Game } from '../../game/state.js';
@@ -42,20 +43,23 @@ function lessonSelector(selected: number, width: number): string[] {
 }
 
 export function statsBody(game: Game, width: number, budget: number): string[] {
-  const key = resultKey(game.progress.difficulty, game.lesson);
+  const practice = game.course ? game.statsPracticeId ?? coursePracticeIds[0]! : null;
+  const selectedIndex = practice ? coursePracticeIds.indexOf(practice) : game.lesson;
+  const total = practice ? coursePracticeIds.length : LESSON_COUNT;
+  const key = practice ? `${game.progress.difficulty}:${practice}` : resultKey(game.progress.difficulty, game.lesson);
   const history = game.progress.attempts[key] ?? [];
   const latest = history.at(-1);
   const previous = previousComparableAttempt(history);
   const inner = width >= BOX_MIN_WIDTH ? Math.min(width, PANEL_WIDTH) - 4 : width;
   const narrow = inner < 36;
-  const lessons = lessonSelector(game.lesson, inner);
-  const title = hubLines[game.lesson]!.replace(/^\d+\s+/, '');
+  const lessons = practice ? [] : lessonSelector(game.lesson, inner);
+  const title = practice ? practiceTitle(practice) : hubLines[game.lesson]!.replace(/^\d+\s+/, '');
   const overview: (string | null)[] = [
     `${pink('STATS')} ${faint('·')} ${cyan(game.progress.difficulty.toUpperCase())}`,
-    `${gold('LESSONS')} ${faint(`${game.lesson + 1} / ${LESSON_COUNT}`)}`,
+    `${gold('LESSONS')} ${faint(`${selectedIndex + 1} / ${total}`)}`,
     ...lessons,
     faint('h / l  change lesson'),
-    `${cyan(String(game.lesson + 1).padStart(2, '0'))}  ${title}`,
+    `${cyan(String(selectedIndex + 1).padStart(2, '0'))}  ${title}`,
     latest ? `${gold('LATEST')} ${formatTime(latest.elapsedMs)}${narrow ? '' : `  ${faint(`· ${history.length} attempts`)}`}` :
       faint(narrow ? 'No attempts yet' : 'No attempts yet. Play this lesson.'),
   ];

@@ -1,3 +1,4 @@
+import type { CourseState } from '../course/types.js';
 import { challengeKeys, challengeTitles, difficulties, LESSON_COUNT, stageIds, type Difficulty, type Lesson } from '../lessons/index.js';
 import { emptyCommand, type CommandState } from '../vim/command.js';
 import type { EditState } from '../vim/editing.js';
@@ -9,7 +10,7 @@ export { SCORING_VERSION } from './constants.js';
 
 export type Attempt = LessonResult & { completedAt: string | null; scoringVersion?: number; commandsUsed?: string[] };
 export type Progress = { completed: number; badges: string[]; difficulty: Difficulty; results: Record<string, LessonResult>; attempts: Record<string, Attempt[]> };
-export type Phase = 'menu' | 'hub' | 'difficulty' | 'stats' | 'play' | 'reward' | 'complete';
+export type Phase = 'menu' | 'hub' | 'difficulty' | 'stats' | 'play' | 'reward' | 'complete' | 'course';
 export type Game = {
   phase: Phase; lesson: number; checkpoint: number; cursor: Position; hubCursor: Position;
   difficultyCursor: Position; activeLesson: Lesson | null; progress: Progress; message: string; hint: boolean;
@@ -17,7 +18,7 @@ export type Game = {
   checkpointScores: CheckpointScore[]; lastHit: Position | null; lastHitAtMs: number | null;
   newUnlock: boolean; statsOffset: number;
   command: CommandState;
-  usedCommands: string[]; edit: EditState | null;
+  usedCommands: string[]; edit: EditState | null; course?: CourseState; statsPracticeId?: string;
 };
 const base: Motion[] = ['h', 'j', 'k', 'l'];
 const simpleMotions: readonly string[] = ['w', 'b', 'e', '0', '$', '^', 'gg', 'G'];

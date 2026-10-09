@@ -1,3 +1,4 @@
+import { createExamplePractice, extraPractices } from '../course/practices.js';
 import type { Motion } from '../vim/motion.js';
 import { advancedLesson } from './advanced.js';
 import { legacyIds, stageBadge, stageIds } from './catalog.js';
@@ -29,6 +30,14 @@ export class LessonCatalog {
     this.register('review-search', reviewSearch);
     this.register('navigator', navigator);
     for (const id of stageIds.filter(id => id.startsWith('edit-'))) this.register(id, editingLesson);
+  }
+
+  createById(id: string, difficulty: Difficulty, unlocked: readonly Motion[]): Lesson {
+    const index = stageIds.indexOf(id as typeof stageIds[number]);
+    if (index >= 0) return this.create(index, difficulty, unlocked);
+    const practice = extraPractices.get(id);
+    if (!practice) throw new RangeError(`Unknown practice ${id}`);
+    return createExamplePractice(practice.topic, practice.example);
   }
 
   register(id: string, factory: LessonFactory): void {

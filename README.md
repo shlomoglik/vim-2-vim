@@ -9,13 +9,13 @@ npm install
 npm start
 ```
 
-Press `R` to resume or `S` to start over. Starting over resets lesson unlocks and badges while preserving every attempt. In the scrollable course hub, use earned Vim commands and press Enter on a lesson, Stats, or Difficulty. Locked lessons remain visible. The timer starts on the first play keystroke. Press **F1** for a free hint, Escape to cancel an unfinished command, and Ctrl+C to quit. The title and controls stay pinned when the terminal is short; the editor scrolls vertically and horizontally to follow the cursor and target.
+Press `R` to browse the course or `S` to start over. Starting over resets lesson unlocks and badges while preserving every attempt. The menu groups lessons into Movement, Insertion, Editing, Text objects, and Visual mode. Choose a section, then a topic. Each topic lists worked **Examples** before **Practice**. Examples animate automatically; press Enter to step ahead, `h`/`l` to switch examples, `r` to replay, and `p` to open its practices. Escape returns to the previous menu. Stats and Difficulty are available from the section menu. The timer starts on the first practice keystroke. Press **F1** for a free hint and Ctrl+C to quit. The editor scrolls vertically and horizontally to follow the cursor and target.
 
 ## Course
 
-Command lessons earn `w`, `b`, `e`, `0`, `$`, `^`, `gg`, `G`, Counts, `f`, `F`, `t`, `T`, `;`, `,`, `/`, `?`, `n`, `N`, and `%`. Four reviews revisit earlier commands without awarding a badge. The Navigator challenge requires successful use of all 20 commands before it awards Navigator; its remaining commands appear during play. A count such as `10j` or `12G` includes each digit in the score. For character finds, type the command and target character, such as `fa`. Searches use literal, case-sensitive text and Enter, such as `/star↵` or `?star↵`; they wrap through the buffer.
+Command practices earn `w`, `b`, `e`, `0`, `$`, `^`, `gg`, `G`, Counts, `f`, `F`, `t`, `T`, `;`, `,`, `/`, `?`, `n`, `N`, and `%`. Four reviews revisit earlier commands without awarding a badge. The Navigator challenge requires successful use of all 20 commands before it awards Navigator; its remaining commands appear during play. The grouped course also includes additional worked examples and focused practices. A count such as `10j` or `12G` includes each digit in the score. For character finds, type the command and target character, such as `fa`. Searches use literal, case-sensitive text and Enter, such as `/star↵` or `?star↵`; they wrap through the buffer.
 
-The editing lab covers `i`, `a`, Escape, `I`, `A`, `o`, `O`, `x`, `r`, `s`, `u`, Ctrl-R, and `dd`. Use navigation to reach each repair. A dim green suggestion shows one target at a time. The status line shows the practice filename and modified or saved state. `:w` saves the buffer within the exercise. Editing stages complete when the saved file exactly matches the target, regardless of which commands were used; used commands are kept with each attempt for Stats.
+Insertion and Editing cover `i/a`, `I/A`, `o/O`, Escape, `s/x/r`, `dw/de`, `cw/ce`, `dd/D/cc/C`, `dj/dk`, `yy/p/P`, and undo/redo. Text objects cover words, WORDS, quotes, brackets, and paragraphs. Visual mode covers character and line selections, changing selection ends, and deleting, changing, or yanking selections. Use navigation to reach each repair. A dim green suggestion shows one target at a time. The status line shows the practice filename and modified or saved state. `:w` saves the buffer within the exercise. Editing stages complete when the saved file exactly matches the target, regardless of which commands were used; used commands are kept with each attempt for Stats.
 
 Each navigation checkpoint has an authored reference route, replayed through the same command interpreter as player input. Accuracy compares the route's keystroke count with yours. Speed uses a par of 250 ms per reference key; proficiency averages speed and accuracy. Scores are feedback for replay; completing the stage unlocks the next one.
 
@@ -36,6 +36,8 @@ The application composes a stateful game engine with terminal, rendering, and fi
 | `src/TerminalGame.ts` | Terminal lifecycle, animation scheduling, and saving |
 | `src/game/GameEngine.ts` | Own the session and route input by phase; accept a clock and lesson catalog |
 | `src/game/` | Session setup, menu navigation, play, completion, scores, and state types |
+| `src/course/sections/` | Grouped lessons, examples, command lists, and links to original practices |
+| `src/course/browser.ts` | Section, lesson, example, and practice navigation |
 | `src/lessons/definitions/` | One authoring module per lesson |
 | `src/lessons/LessonCatalog.ts` | Register and create lessons by stable course ID |
 | `src/lessons/catalog.ts` | Course order, displayed keys, badges, and legacy save IDs |
@@ -46,7 +48,26 @@ The application composes a stateful game engine with terminal, rendering, and fi
 
 Scoring and time constants live in `src/game/constants.ts`; terminal dimensions and animation durations live in `src/ui/constants.ts`. Shared practice buffers and difficulty settings live in `src/lessons/fixtures.ts` and `foundationFixtures.ts`. The original top-level module paths re-export their implementations for compatibility.
 
-## Editing lessons
+## Editing grouped lessons
+
+Edit the corresponding section in `src/course/sections/`: `movement.ts`, `insertion.ts`, `editing.ts`, `textObjects.ts`, or `visual.ts`. Each topic declares its title, subgroup, commands, examples, and optional `legacyPractices` linking to existing exercises. These modules follow the supplied VimHero lesson grouping.
+
+The `motion` helper authors a navigation example with a buffer, starting cursor, and key sequence. The `repair` helper authors an editing example with an independently specified target buffer. `topic` groups them into a lesson. Each example becomes a focused practice automatically, with its own stable attempt ID; editing practices require `:w` to finish. The original exercises retain their IDs, difficulty routes, scores, and saved history.
+
+```ts
+topic('change-words', 'Change words', 'Characters & words', [
+  repair('cw', 'Change the word and keep its trailing space.',
+    ['old value'], ['new value'], 'cwnew\x1b'),
+  repair('ce', 'Change through the word end.',
+    ['old value'], ['new value'], 'cenew\x1b'),
+]);
+```
+
+Use `\x1b` in an authored sequence for Escape. Keep topic and example IDs stable to preserve saved attempts. Worked examples loop automatically, support stepping and replay, and never affect scores or saved progress. In Normal mode, Escape returns from a practice; in Insert or Visual mode, it first leaves that mode.
+
+The course is freely browsable. Original staged unlocks and badge history remain compatible with older saves. Stats includes original and focused practices, with separate difficulty histories. The embedded editor implements the taught command subset; half-page movement uses ten practice rows.
+
+## Editing original practices
 
 Open the corresponding file in `src/lessons/definitions/`, such as `word-forward.ts`, `find-backward.ts`, or `edit-insert.ts`.
 
@@ -68,7 +89,7 @@ export const definition: EditingDefinition = {
 
 Navigation teaching titles also supply the course hub title; `hubTitle` handles the two foundational lessons whose hub labels differ. Course order, key labels, and badge rules are defined in `catalog.ts`. Keep existing stage IDs stable because saved attempt records use them. `legacyIds` describes the original save format and must retain its original order.
 
-To add a new lesson, create its definition or factory, add its stable ID to the course order in `catalog.ts`, and register its factory in `LessonCatalog`. Add any new key labels and badge metadata there as well. Existing navigation definitions are wired through `definitions/navigation.ts`; editing definitions are wired through `editing.ts`. The engine and renderer consume the same `Lesson` contract.
+To add an original staged practice, create its definition or factory, add its stable ID to the course order in `catalog.ts`, and register its factory in `LessonCatalog`. Add any new key labels and badge metadata there as well. Existing navigation definitions are wired through `definitions/navigation.ts`; editing definitions are wired through `editing.ts`. The engine and renderer consume the same `Lesson` contract.
 
 For an alternative lesson in a test or another game instance, create a `LessonCatalog`, call `register(existingId, factory)`, and pass it to `new GameEngine(progress, { lessons: catalog })`. Each catalog has its own registrations. A custom `Clock` makes session timings and attempt timestamps deterministic. A custom `ProgressRepository` can replace file storage in `TerminalGame`.
 
@@ -79,6 +100,6 @@ npm run typecheck
 npm test
 ```
 
-The tests retain the original command, scoring, course, editing, and save-migration coverage. They also compare fingerprints captured before this refactor for all 31 lessons at three difficulties and 12 screen scenarios at six terminal sizes. Engine tests cover course completion, pending searches, difficulty changes, saving, custom catalogs, and terminal input handling.
+The tests retain the original command, scoring, course, editing, and save-migration coverage. They also compare fingerprints captured before this refactor for all 31 lessons at three difficulties and 12 screen scenarios at six terminal sizes. Engine tests cover course completion, pending searches, difficulty changes, saving, custom catalogs, and terminal input handling. Grouped-course tests also validate every example against its authored target, exercise new Vim commands, check save/reload, and render every example at narrow and wide terminal sizes.
 
 After an intentional lesson or visual change, review its behavior, then run `npm run snapshots:update` and review the changed fixture entries before committing. Snapshot updates are explicit; tests never rewrite the baseline. The snapshot scenarios use fixed time and UTC dates.
