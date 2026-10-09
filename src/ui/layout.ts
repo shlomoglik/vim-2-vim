@@ -18,3 +18,13 @@ export function viewportStart(total: number, visible: number, cursor: number, ta
   if (last - first < visible) return Math.max(0, Math.min(first, lastStart));
   return Math.max(0, Math.min(cursor - Math.floor(visible / 2), lastStart));
 }
+
+/** Scroll only far enough to bring an offscreen selection back into view. */
+export function edgeViewportStart(total: number, visible: number, cursor: number, previous: number): number {
+  const lastStart = Math.max(0, total - visible);
+  const first = Math.max(0, Math.min(previous, lastStart));
+  if (cursor >= total) return first; // Pinned actions do not move the lesson viewport.
+  if (cursor < first) return Math.max(0, cursor);
+  if (cursor >= first + visible) return Math.min(lastStart, cursor - visible + 1);
+  return first;
+}

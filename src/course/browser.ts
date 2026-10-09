@@ -8,19 +8,21 @@ import { courseMotions, courseSections, courseTopics, navigationCommands, topicF
 import { animatedDemo, DEMO_STEP_MS, newDemo, stepDemo } from './demo.js';
 import type { CourseState, CourseView } from './types.js';
 
-export type MenuEntry = { label: string; kind: 'topic' | 'examples' | 'practice' | 'stats' | 'difficulty'; id?: string };
+export type MenuEntry = { label: string; kind: 'heading' | 'topic' | 'examples' | 'practice' | 'stats' | 'difficulty'; id?: string };
 export type CourseLessonProvider = Pick<LessonCatalog, 'create'> & Partial<Pick<LessonCatalog, 'createById'>>;
-export const newCourseState = (): CourseState => ({ view: 'sections', sectionId: null, topicId: null, cursor: { row: 0, col: 0 }, demo: null, practiceId: null, cursors: {}, expandedTopics: [] });
+export const newCourseState = (): CourseState => ({ view: 'sections', sectionId: null, topicId: null, cursor: { row: 1, col: 0 }, demo: null, practiceId: null, cursors: {}, expandedTopics: [] });
 export const practiceCompleted = (progress: Progress, id: string) => !!progress.attempts[`${progress.difficulty}:${id}`]?.length;
 
 export function courseEntries(game: Game): MenuEntry[] {
   const course = game.course!;
   if (course.view === 'sections') return [
-    ...courseSections.flatMap(section => section.topics.flatMap(topic => {
+    ...courseSections.flatMap(section => [
+      { label: `### ${section.title}`, kind: 'heading' as const, id: section.id },
+      ...section.topics.flatMap(topic => {
       const done = practiceCompleted(game.progress, topicPracticeId(topic));
       const expanded = course.expandedTopics?.includes(topic.id);
       const entries: MenuEntry[] = [{
-        label: `${expanded ? '▾' : '▸'} ${done ? '✓' : '·'} ${topic.title} [${topic.commands.join(' ')}] · ${section.title}`,
+        label: `${expanded ? '▾' : '▸'} ${done ? '✓' : '·'} ${topic.title} [${topic.commands.join(' ')}]`,
         kind: 'topic', id: topic.id,
       }];
       if (expanded) entries.push(
@@ -28,7 +30,7 @@ export function courseEntries(game: Game): MenuEntry[] {
         { label: `    ${done ? '✓' : '·'} Practice · 60+ mixed goals`, kind: 'practice', id: topicPracticeId(topic) },
       );
       return entries;
-    })),
+    })]),
     { label: 'View stats', kind: 'stats' }, { label: 'Set difficulty', kind: 'difficulty' },
   ];
   return [];
@@ -108,6 +110,7 @@ export function browseCourse(game: Game, key: string, lessons: CourseLessonProvi
     const entry = entries[course.cursor.row];
     if (!entry) return game;
     switch (entry.kind) {
+      case 'heading': return game;
       case 'topic': {
         const expanded = new Set(course.expandedTopics ?? []);
         if (expanded.has(entry.id!)) expanded.delete(entry.id!); else expanded.add(entry.id!);
@@ -123,5 +126,12 @@ export function browseCourse(game: Game, key: string, lessons: CourseLessonProvi
   }
   if (key === 'f1') return { ...game, message: 'j/k move, Enter/Space expands, p practices, Esc returns. / searches all topics.' };
   const outcome = interpret(entries.map(entry => entry.label), course.cursor, game.command, key, navigationCommands);
-  return { ...game, message: outcome.message, command: outcome.state, course: { ...course, cursor: outcome.cursor } };
+  let cursor = outcome.cursor;
+  if (entries[cursor.row]?.kind === 'heading') {
+    const direction = searching || cursor.row === 0 || cursor.row >= course.cursor.row ? 1 : -1;
+    let row = cursor.row;
+    while (entries[row]?.kind === 'heading') row += direction;
+    cursor = { row: row < 0 || row >= entries.length ? course.cursor.row : row, col: 0 };
+  }
+  return { ...game, message: outcome.message, command: outcome.state, course: { ...course, cursor } };
 }

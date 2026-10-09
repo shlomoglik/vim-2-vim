@@ -165,7 +165,7 @@ test('flat menu expands inline, searches every topic, and retains difficulty acc
   const engine = new GameEngine(undefined, { clock });
   engine.handleInput('r');
   assert.equal(courseEntries(engine.state).filter(entry => entry.kind === 'topic').length, courseTopics.length);
-  assert.ok(!courseEntries(engine.state).some(entry => ['heading', 'section'].includes(entry.kind)));
+  assert.deepEqual(courseEntries(engine.state).filter(entry => entry.kind === 'heading').map(entry => entry.label), courseSections.map(section => `### ${section.title}`));
   searchMenu(engine, 'Find a character');
   const row = engine.state.course!.cursor.row;
   assert.equal(engine.state.course?.view, 'sections');
@@ -182,6 +182,98 @@ test('flat menu expands inline, searches every topic, and retains difficulty acc
   assert.equal(engine.handleInput('\n').persist, true);
   assert.equal(engine.state.progress.difficulty, 'hard');
   assert.equal(engine.state.phase, 'course');
+});
+
+test('course actions stay pinned and selectable as collapsed and expanded lessons scroll', () => {
+  const renderer = new GameRenderer();
+  for (const expandedTopics of [[], courseTopics.map(topic => topic.id)]) {
+    const menu = { ...newGame(), phase: 'course' as const, course: { ...newCourseState(), expandedTopics } };
+    const entries = courseEntries(menu);
+    for (const [width, height] of [[22, 16], [32, 16], [46, 24], [80, 40], [80, 60]]) {
+      let actionPositions: number[] | undefined;
+      for (const row of [0, 15, entries.length - 3, entries.length - 2, entries.length - 1]) {
+        const game = { ...menu, course: { ...menu.course, cursor: { row, col: 0 } } };
+        const rendered = renderer.render(game, width!, height!, 1000);
+        const plain = rendered.map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+        const positions = ['View stats', 'Set difficulty'].map(label => plain.findIndex(line => line.includes(label)));
+        assert.ok(positions.every(position => position >= 0), `${width}x${height}: row ${row}`);
+        assert.equal(positions[1], positions[0]! + 1);
+        if (actionPositions) assert.deepEqual(positions, actionPositions);
+        actionPositions = positions;
+        if (row >= entries.length - 2) {
+          assert.ok(rendered[positions[row - (entries.length - 2)]!]!.includes('\x1b[38;5;240;48;5;255m'));
+        }
+      }
+    }
+  }
+});
+
+test('lesson menu uses the terminal width to show complete lesson labels', () => {
+  const game = { ...newGame(), phase: 'course' as const, course: newCourseState() };
+  const label = courseEntries(game).find(entry => entry.kind === 'topic')!.label;
+  for (const width of [80, 120]) {
+    const lines = new GameRenderer().render(game, width, 24, 1000);
+    const plain = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    assert.ok(plain.some(line => line.includes(label)));
+    const border = plain.find(line => line.startsWith('╭'))!;
+    assert.equal(visibleWidth(border), width);
+    assert.ok(lines.every(line => visibleWidth(line) <= width));
+  }
+});
+
+test('expanded lesson backgrounds remain visible after moving the cursor and clear on collapse', () => {
+  const engine = new GameEngine(undefined, { clock });
+  const renderer = new GameRenderer();
+  engine.handleInput('r'); engine.handleInput('\n'); engine.handleInput('j');
+  const expanded = renderer.render(engine.state, 80, 24, 1000).find(line => line.includes('Basic movement'))!;
+  assert.ok(expanded.includes('48;5;24'));
+  engine.handleInput('k'); engine.handleInput('\n');
+  const collapsed = renderer.render(engine.state, 80, 24, 1000).find(line => line.includes('Basic movement'))!;
+  assert.ok(!collapsed.includes('48;5;24'));
+});
+
+test('menu scrolls only at viewport edges, including reverse movement and pinned actions', () => {
+  const engine = new GameEngine(undefined, { clock });
+  const renderer = new GameRenderer();
+  engine.handleInput('r'); engine.handleInput('\n'); // Expand enough rows to exercise scrolling.
+  const renderRows = () => renderer.render(engine.state, 80, 16, 1000)
+    .map(line => line.replace(/\x1b\[[0-9;]*m/g, ''))
+    .flatMap(line => {
+      const match = /^│\s*(\d+)\s*│/.exec(line);
+      return match ? [Number(match[1])] : [];
+    }).filter(row => row <= courseEntries(engine.state).length - 2);
+  const initial = renderRows();
+  const lastVisible = initial.at(-1)!;
+  while (engine.state.course!.cursor.row < lastVisible - 1) {
+    engine.handleInput('j');
+    assert.deepEqual(renderRows(), initial);
+  }
+  engine.handleInput('j');
+  const scrolled = renderRows();
+  assert.notDeepEqual(scrolled, initial);
+  assert.ok(scrolled.includes(engine.state.course!.cursor.row + 1));
+  engine.handleInput('k');
+  assert.deepEqual(renderRows(), scrolled);
+  engine.handleInput('G'); // The pinned difficulty action does not scroll lessons.
+  assert.deepEqual(renderRows(), scrolled);
+  engine.handleInput('g'); engine.handleInput('g');
+  assert.deepEqual(renderRows(), initial);
+});
+
+test('section headers are separate rows and are skipped by movement and searches', () => {
+  const engine = new GameEngine(undefined, { clock });
+  engine.handleInput('r');
+  const selected = () => courseEntries(engine.state)[engine.state.course!.cursor.row]!;
+  assert.equal(selected().id, 'basic-movement');
+  for (const key of '/### Insertion\n') engine.handleInput(key);
+  assert.equal(selected().id, 'insert-append');
+  engine.handleInput('k');
+  assert.equal(selected().id, 'matching-pairs');
+  engine.handleInput('j');
+  assert.equal(selected().id, 'insert-append');
+  assert.ok(!selected().label.includes('Insertion'));
+  engine.handleInput('g'); engine.handleInput('g');
+  assert.equal(selected().id, 'basic-movement');
 });
 
 test('every topic practice clears 60 or more interleaved goals and covers its whole command group', () => {

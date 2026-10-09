@@ -10,8 +10,9 @@ import { cursorShade, ghostFrame, targetPulse } from '../animation.js';
 import { cyan, faint, gold, green, keycap } from '../styles.js';
 import { editorPanel } from './editor.js';
 import { selectorPanel } from './selector.js';
+import { edgeViewportStart } from '../layout.js';
 
-export function courseScreen(game: Game, width: number, height: number, masthead: string[], nowMs: number): { top: string[]; middle: string[]; bottom: string[] } {
+export function courseScreen(game: Game, width: number, height: number, masthead: string[], nowMs: number, previousScrollTop = 0): { top: string[]; middle: string[]; bottom: string[]; scrollTop?: number } {
   const course = game.course!;
   const section = sectionFor(course.sectionId);
   const topic = topicFor(course.topicId);
@@ -37,6 +38,11 @@ export function courseScreen(game: Game, width: number, height: number, masthead
   const notes = game.message ? wrapTextWithAnsi(game.message, width) : [];
   const budget = height - top.length - bottom.length - notes.length;
   const visibleRows = Math.max(1, budget - (width >= BOX_MIN_WIDTH ? 4 : 1));
-  const middle = [...selectorPanel(entries.map(entry => entry.label), course.cursor, width, 'lessons.txt', visibleRows, game.command.pending), ...notes];
-  return { top, middle, bottom };
+  const scrollingRows = Math.max(1, visibleRows - 2);
+  let scrollTop = edgeViewportStart(entries.length - 2, scrollingRows, course.cursor.row, previousScrollTop);
+  if (scrollingRows > 1 && scrollTop === course.cursor.row && entries[scrollTop - 1]?.kind === 'heading') scrollTop--;
+  const expandedRows = new Set(entries.flatMap((entry, row) => entry.kind === 'topic' && course.expandedTopics?.includes(entry.id!) ? [row] : []));
+  const headingRows = new Set(entries.flatMap((entry, row) => entry.kind === 'heading' ? [row] : []));
+  const middle = [...selectorPanel(entries.map(entry => entry.label), course.cursor, width, 'lessons.txt', visibleRows, game.command.pending, undefined, 2, course.cursor.row, width, { firstRow: scrollTop, expandedRows, headingRows }), ...notes];
+  return { top, middle, bottom, scrollTop };
 }

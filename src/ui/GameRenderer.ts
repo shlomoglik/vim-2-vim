@@ -15,9 +15,12 @@ import { courseOptions, selectorPanel } from './panels/selector.js';
 import { statsBody } from './panels/stats.js';
 import { badgeDisplay, cyan, dots, faint, gold, green, keycap, paint, pink, rule } from './styles.js';
 
-/** Side-effect-free rendering: time and dimensions are supplied by the terminal adapter. */
+/** Keeps the menu viewport stable; game state, time, and dimensions come from the adapter. */
 export class GameRenderer {
+  private menuScrollTop = 0;
+
   render(game: Game, width: number, height: number, nowMs: number): string[] {
+    if (game.phase === 'menu') this.menuScrollTop = 0;
 
     if (width < MIN_TERMINAL_COLUMNS || height < MIN_TERMINAL_ROWS) {
       const warning = width < MIN_TERMINAL_COLUMNS ? 'Widen to 22 columns' : 'Grow to 16 rows';
@@ -36,7 +39,9 @@ export class GameRenderer {
     let bottom: string[] = [];
 
     if (game.phase === 'course') {
-      ({ top, middle, bottom } = courseScreen(game, width, height, masthead, nowMs));
+      const screen = courseScreen(game, width, height, masthead, nowMs, this.menuScrollTop);
+      ({ top, middle, bottom } = screen);
+      if (screen.scrollTop !== undefined) this.menuScrollTop = screen.scrollTop;
     } else if (game.phase === 'menu') {
       top = [...masthead, cyan('CHOOSE YOUR RUN'), faint(game.course ? 'Choose a section. Learn, then practice.' : game.progress.completed >= NAVIGATION_COUNT ? 'Navigation complete · Editing lab open' : narrow ? 'Move. Learn. Level up.' : 'Move through text. Collect motions.')];
       middle = [`${gold('PROGRESS')} ${game.course ? `${coursePracticeIds.filter(id => !!game.progress.attempts[`${game.progress.difficulty}:${id}`]?.length).length}/${coursePracticeIds.length} practices` : `${game.progress.completed}/${LESSON_COUNT}`}`,

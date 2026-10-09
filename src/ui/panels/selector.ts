@@ -6,29 +6,36 @@ import { BOX_MIN_WIDTH, PANEL_WIDTH } from '../constants.js';
 import { viewportStart } from '../layout.js';
 import { cyan, paint } from '../styles.js';
 
-export function selectorPanel(options: readonly string[], cursor: Position, width: number, filename: string, visibleRows: number, pending = '', unlockedThrough?: number, pinnedRows = 0, contextRow = cursor.row): string[] {
+type SelectorAppearance = { firstRow?: number; expandedRows?: ReadonlySet<number>; headingRows?: ReadonlySet<number> };
+
+export function selectorPanel(options: readonly string[], cursor: Position, width: number, filename: string, visibleRows: number, pending = '', unlockedThrough?: number, pinnedRows = 0, contextRow = cursor.row, maxWidth = PANEL_WIDTH, appearance: SelectorAppearance = {}): string[] {
   const boxed = width >= BOX_MIN_WIDTH;
-  const panelWidth = boxed ? Math.min(width, PANEL_WIDTH) : width;
+  const panelWidth = boxed ? Math.min(width, maxWidth) : width;
   const contentWidth = panelWidth - (boxed ? 2 : 0);
-  const gutterWidth = boxed ? 7 : 5;
+  const numberWidth = Math.max(2, String(options.length).length);
+  const gutterWidth = numberWidth + (boxed ? 5 : 3);
   const textWidth = contentWidth - gutterWidth;
   const base = '\x1b[0;48;5;236;38;5;253m';
   const ghost = '\x1b[0;48;5;236;38;5;241m';
   const scrollingCount = options.length - pinnedRows;
   const scrollingRows = Math.max(1, visibleRows - pinnedRows);
-  const firstRow = viewportStart(scrollingCount, scrollingRows, Math.min(cursor.row, scrollingCount - 1), Math.min(contextRow, scrollingCount - 1));
+  const firstRow = appearance.firstRow ?? viewportStart(scrollingCount, scrollingRows, Math.min(cursor.row, scrollingCount - 1), Math.min(contextRow, scrollingCount - 1));
   const rowIndices = [
     ...Array.from({ length: scrollingRows }, (_, offset) => firstRow + offset < scrollingCount ? firstRow + offset : -1),
     ...Array.from({ length: pinnedRows }, (_, offset) => scrollingCount + offset),
   ];
   const rows = rowIndices.map(row => {
     const source = options[row];
-    if (source === undefined) return `\x1b[48;5;234;38;5;245m${boxed ? '~  │   ' : '~ │  '}${base}${' '.repeat(textWidth)}\x1b[0m`;
+    if (source === undefined) return `\x1b[48;5;234;38;5;245m${'~'.padEnd(numberWidth)}${boxed ? ' │   ' : '│  '}${base}${' '.repeat(textWidth)}\x1b[0m`;
+    if (appearance.headingRows?.has(row)) {
+      return `\x1b[48;5;234m${' '.repeat(gutterWidth)}\x1b[1;38;5;117m${source.slice(0, textWidth).padEnd(textWidth)}\x1b[0m`;
+    }
     const locked = unlockedThrough !== undefined && row < LESSON_COUNT && row > unlockedThrough;
-    const ink = locked ? ghost : base;
-    const label = boxed ? `${String(row + 1).padStart(2)} │ ` : `${String(row + 1).padStart(2)}│`;
-    const arrow = row === cursor.row ? '\x1b[48;5;234;1;96m›' : locked ? '\x1b[48;5;234;38;5;240m›' : '\x1b[48;5;234;38;5;245m›';
-    let line = `\x1b[48;5;234;38;5;${locked ? 240 : 245}m${label}${arrow} ${ink}`;
+    const background = appearance.expandedRows?.has(row) ? 24 : 234;
+    const ink = appearance.expandedRows?.has(row) ? '\x1b[0;48;5;24;38;5;253m' : locked ? ghost : base;
+    const label = boxed ? `${String(row + 1).padStart(numberWidth)} │ ` : `${String(row + 1).padStart(numberWidth)}│`;
+    const arrow = row === cursor.row ? `\x1b[48;5;${background};1;96m›` : `\x1b[48;5;${background};38;5;${locked ? 240 : 245}m›`;
+    let line = `\x1b[48;5;${background};38;5;${locked ? 240 : 245}m${label}${arrow} ${ink}`;
     const lockedWordStart = locked && source.endsWith(' locked') ? source.length - 'locked'.length : -1;
     for (let col = 0; col < textWidth; col++) {
       const char = source[col] ?? ' ';
