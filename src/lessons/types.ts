@@ -14,6 +14,7 @@ export type Lesson = {
   requiredCommands?: readonly string[];
   editing?: { filename: string; expected: readonly string[]; requireSave: boolean };
   goals?: readonly PracticeGoal[];
+  pace?: { msPerKey: number; thinkingMs: number };
 };
 
 export type PracticeGoal = Pick<Lesson, 'lines' | 'start' | 'instruction' | 'hint' | 'editing'> & {

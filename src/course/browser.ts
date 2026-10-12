@@ -5,6 +5,7 @@ import type { LessonCatalog } from '../lessons/LessonCatalog.js';
 import { emptyCommand, interpret } from '../vim/command.js';
 import { newEdit } from '../vim/editing.js';
 import { courseMotions, courseSections, courseTopics, navigationCommands, topicFor, topicPracticeId } from './curriculum.js';
+import { practiceGoalCount } from './practices.js';
 import { animatedDemo, DEMO_STEP_MS, newDemo, stepDemo } from './demo.js';
 import type { CourseState, CourseView } from './types.js';
 
@@ -27,7 +28,7 @@ export function courseEntries(game: Game): MenuEntry[] {
       }];
       if (expanded) entries.push(
         { label: `    Examples · ${topic.commands.join(' ')}`, kind: 'examples', id: topic.id },
-        { label: `    ${done ? '✓' : '·'} Practice · 60+ mixed goals`, kind: 'practice', id: topicPracticeId(topic) },
+        { label: `    ${done ? '✓' : '·'} Practice · ${practiceGoalCount(topic, game.progress.difficulty)} goals`, kind: 'practice', id: topicPracticeId(topic) },
       );
       return entries;
     })]),

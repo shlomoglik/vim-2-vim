@@ -35,7 +35,7 @@ export const movement: CourseSection = {
       motion('f', 'Type f and a character to find it ahead.', findLine, { row: 0, col: 0 }, 'fa'),
       motion('F', 'Type F and a character to find it behind.', findLine, { row: 0, col: 12 }, 'Fa'),
       motion(';', 'Repeat the most recent character find in its original direction.', findLine, { row: 0, col: 0 }, 'fa;'),
-      motion(',', 'Repeat the most recent character find in reverse.', findLine, { row: 0, col: 0 }, 'fa;,'),
+      motion(',', 'Repeat the most recent character find in reverse.', findLine, { row: 0, col: 0 }, 'fa;;,l'),
     ], ['f', 'F', 'semicolon', 'comma', 'review-finds']),
     topic('character-till', 'Till a character', 'Within a line', [
       motion('t', 'Stop just before a character ahead.', findLine, { row: 0, col: 0 }, 'ta'),
@@ -63,7 +63,7 @@ export const movement: CourseSection = {
       motion('/', 'Search forward for literal text, then press Enter.', search, { row: 0, col: 0 }, '/moon\n'),
       motion('?', 'Search backward for literal text, then press Enter.', search, { row: 1, col: 5 }, '?moon\n'),
       motion('n', 'Repeat the search in the same direction.', search, { row: 0, col: 0 }, '/moon\nn'),
-      motion('N', 'Repeat the search in the opposite direction.', search, { row: 0, col: 0 }, '/moon\nnN'),
+      motion('N', 'Repeat the search in the opposite direction.', search, { row: 0, col: 0 }, '/moon\nnNl'),
     ], ['search-forward', 'search-backward', 'n', 'N', 'review-search']),
     topic('word-search', 'Search the word under cursor', 'Search & matching', [
       motion('*', 'Search forward for the complete word under the cursor.', search, { row: 0, col: 0 }),

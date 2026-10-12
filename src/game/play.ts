@@ -9,7 +9,7 @@ import { unlockedCommands, type Game } from './state.js';
 
 function completeGoal(game: Game, nowMs: number, timestamp?: () => string): Game {
   const lesson = game.activeLesson!;
-  const score = scoreCheckpoint(lesson.idealKeys[game.checkpoint]!, game.keysThisCheckpoint, nowMs - game.checkpointAtMs!);
+  const score = scoreCheckpoint(lesson.idealKeys[game.checkpoint]!, game.keysThisCheckpoint, nowMs - game.checkpointAtMs!, lesson.pace);
   const required = lesson.goals![game.checkpoint]!.requiredCommands;
   const used = lesson.editing ? game.edit!.used : game.usedCommands.slice(game.goalCommandOffset ?? 0);
   if (required.length) {

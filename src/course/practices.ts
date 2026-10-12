@@ -1,11 +1,16 @@
 import { emptyCommand, interpret } from '../vim/command.js';
 import { editKey, newEdit } from '../vim/editing.js';
-import type { Lesson, PracticeGoal } from '../lessons/types.js';
+import type { Difficulty, Lesson, PracticeGoal } from '../lessons/types.js';
 import { shortestRoute } from '../lessons/routing.js';
 import type { Position } from '../vim/motion.js';
 import { displayKey } from './authoring.js';
 import { courseTopics, examplePracticeId, navigationCommands, topicPracticeId } from './curriculum.js';
 import type { CourseExample, CourseTopic } from './types.js';
+import { topicPuzzles } from './puzzles.js';
+
+export function practiceGoalCount(topic: CourseTopic, difficulty: Difficulty = 'normal'): number {
+  return difficulty === 'hard' && !topic.examples.some(example => example.expected) ? 50 : 30;
+}
 
 export const extraPractices = new Map(courseTopics.flatMap(topic => topic.examples.map(example => [examplePracticeId(topic, example), { topic, example }] as const)));
 
@@ -26,8 +31,8 @@ function navigationVariant(example: CourseExample, round: number): CourseExample
   return example;
 }
 
-/** Keep each board visible for at least five goals, aiming for ten per batch. */
-function boardBatches(goals: readonly PracticeGoal[]): PracticeGoal[] {
+/** Five-goal chapters keep boards stable without expanding the session budget. */
+function boardBatches(goals: readonly PracticeGoal[], budget: number): PracticeGoal[] {
   const boards = new Map<string, PracticeGoal[]>();
   for (const goal of goals) {
     const key = JSON.stringify(goal.lines);
@@ -35,22 +40,22 @@ function boardBatches(goals: readonly PracticeGoal[]): PracticeGoal[] {
     group.push(goal);
     boards.set(key, group);
   }
-  const batches: PracticeGoal[][] = [];
-  for (const group of boards.values()) {
-    const count = Math.max(5, group.length);
-    const batchCount = Math.max(1, Math.round(count / 10));
-    for (let batch = 0, offset = 0; batch < batchCount; batch++) {
-      const size = Math.floor(count / batchCount) + (batch < count % batchCount ? 1 : 0);
-      batches.push(Array.from({ length: size }, (_, index) => group[(offset + index) % group.length]!));
-      offset += size;
-    }
-  }
-  // Alternate boards where possible, rather than exhausting one board at a time.
+  const groups = [...boards.values()];
+  const focused = groups.map(group => group.filter(goal => goal.focus)).filter(group => group.length);
+  const review = groups.map(group => group.filter(goal => !goal.focus)).filter(group => group.length);
+  const slots = budget / 5;
+  const offsets = new Map<PracticeGoal[], number>();
   const ordered: PracticeGoal[] = [];
-  while (batches.length) {
-    const previous = ordered.at(-1);
-    const index = batches.findIndex(batch => JSON.stringify(batch[0]!.lines) !== JSON.stringify(previous?.lines));
-    ordered.push(...batches.splice(Math.max(0, index), 1)[0]!);
+  let focusChapter = 0, reviewChapter = 0;
+  for (let chapter = 0; chapter < slots; chapter++) {
+    const remainingFocus = Math.max(0, focused.length - focusChapter);
+    const reviewing = review.length > 0 && chapter % 2 === 1 && slots - chapter > remainingFocus;
+    const pool = reviewing ? review : focused;
+    const index = reviewing ? reviewChapter++ : focusChapter++;
+    const group = pool[index % pool.length]!;
+    const offset = offsets.get(group) ?? 0;
+    for (let i = 0; i < 5; i++) ordered.push(group[(offset + i) % group.length]!);
+    offsets.set(group, offset + 5);
   }
   return ordered;
 }
@@ -95,12 +100,11 @@ function connectGoals(goals: readonly PracticeGoal[]): PracticeGoal[] {
       else {
         const reposition = shortestRoute(goal.lines, start, goal.start, ['h', 'j', 'k', 'l']);
         if (samePosition(goal.target, start)) {
-          // Fixed destinations such as 0 or gg need a return goal before repeating.
+          // Fixed destinations use a return goal within the existing session budget.
           connected.push({ ...goal, start: { ...start }, target: goal.start, keys: reposition,
             requiredCommands: [...new Set(reposition)],
             instruction: `${goal.focus ? 'Focus' : 'Review'} · Reach the green target to set up the next motion.`,
             hint: `Example: ${reposition.map(displayKey).join(' ')}` });
-          connected.push(goal);
           continue;
         }
         // At a boundary, include a repositioning route instead of jumping the cursor.
@@ -110,11 +114,29 @@ function connectGoals(goals: readonly PracticeGoal[]): PracticeGoal[] {
     connected.push({ ...goal, start: { ...start }, target, keys,
       hint: `Example: ${keys.map(displayKey).join(' ')}` });
   }
-  return connected;
+  // A reference solution must stop at the first hit, just as player input does.
+  return connected.map(goal => {
+    if (goal.editing) return goal;
+    let cursor = goal.start, state = emptyCommand();
+    const keys: string[] = [], required = new Set<string>();
+    for (const key of goal.keys) {
+      const outcome = interpret(goal.lines, cursor, state, key, navigationCommands);
+      keys.push(key);
+      if (outcome.executed) required.add(outcome.executed);
+      cursor = outcome.cursor; state = outcome.state;
+      if (outcome.moved && samePosition(cursor, goal.target)) break;
+    }
+    return { ...goal, keys, requiredCommands: [...required], hint: `Example: ${keys.map(displayKey).join(' ')}` };
+  });
 }
 
 /** Mix focused goals with other topics' review, when available. */
-export function createTopicPractice(topic: CourseTopic, earned: readonly string[] = []): Lesson {
+export function createTopicPractice(topic: CourseTopic, earned: readonly string[] = [], difficulty: Difficulty = 'normal'): Lesson {
+  const puzzles = topicPuzzles(topic, earned);
+  // Lead with the richest taught route so repeat/reverse tools get a full solution.
+  const examples = topic.examples.some(example => example.expected) ? [...topic.examples] :
+    [...topic.examples].sort((a, b) => b.keys.length - a.keys.length);
+  const focusExamples = [...examples, ...puzzles];
   const basic = courseTopics[0]!;
   const candidates = courseTopics.flatMap(candidate => candidate.examples
     .filter(example => candidate !== topic && (candidate === basic ||
@@ -126,11 +148,11 @@ export function createTopicPractice(topic: CourseTopic, earned: readonly string[
   const review = [...new Map(candidates.map(source => [
     /^\d/.test(source.example.command) ? 'Counts' : source.example.command, source,
   ])).values()];
-  const authoredGoals: PracticeGoal[] = Array.from({ length: Math.max(60, review.length * 2, topic.examples.length * 2) }, (_, index) => {
+  const authoredGoals: PracticeGoal[] = Array.from({ length: Math.max(50, review.length * 2, focusExamples.length * 2) }, (_, index) => {
     const focus = review.length === 0 || index % 2 === 0;
     const sourceIndex = review.length === 0 ? index : Math.floor(index / 2);
-    const source = focus ? { topic, example: topic.examples[sourceIndex % topic.examples.length]! } : review[sourceIndex % review.length]!;
-    const example = navigationVariant(source.example, Math.floor(sourceIndex / (focus ? topic.examples.length : review.length)));
+    const source = focus ? { topic, example: focusExamples[sourceIndex % focusExamples.length]! } : review[sourceIndex % review.length]!;
+    const example = navigationVariant(source.example, Math.floor(sourceIndex / (focus ? focusExamples.length : review.length)));
     const lesson = createExamplePractice(source.topic, example);
     const alreadySaved = example.keys.slice(-3).join('') === ':w\n';
     const keys = example.expected && !alreadySaved ? [...example.keys, ':', 'w', '\n'] : [...example.keys];
@@ -151,15 +173,16 @@ export function createTopicPractice(topic: CourseTopic, earned: readonly string[
       }
     }
     return { lines: lesson.lines, start: lesson.start, target: lesson.checkpoints[0]!,
-      instruction: `${focus ? 'Focus' : 'Review'} · ${source.example.command}: ${lesson.instruction}`,
+      instruction: `${focus ? (puzzles.includes(source.example) ? 'Quest' : 'Focus') : 'Review'} · ${lesson.instruction}`,
       hint: lesson.hint, editing: lesson.editing, keys, requiredCommands: [...required], focus };
   });
-  const goals = connectGoals(boardBatches(authoredGoals));
+  const goals = connectGoals(boardBatches(authoredGoals, practiceGoalCount(topic, difficulty)));
   const first = goals[0]!;
   return { id: topicPracticeId(topic), title: `${topic.title} · mixed practice`, badge: null,
     lines: first.lines, start: first.start, instruction: first.instruction, hint: first.hint, editing: first.editing,
     checkpoints: goals.map(goal => goal.target), idealKeys: goals.map(goal => goal.keys.length),
-    referenceRoutes: goals.map(goal => goal.keys.join('')), goals };
+    referenceRoutes: goals.map(goal => goal.keys.join('')), goals,
+    pace: { msPerKey: { easy: 750, normal: 500, hard: 250 }[difficulty], thinkingMs: { easy: 3000, normal: 2000, hard: 1000 }[difficulty] } };
 }
 
 export function practiceGoal(lesson: Lesson, index: number): Lesson {

@@ -1,4 +1,4 @@
-import { coursePracticeIds, topicFor } from '../course/curriculum.js';
+import { coursePracticeIds, topicFor, topicPracticeId } from '../course/curriculum.js';
 import { truncateToWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import { formatTime } from '../game/scoring.js';
 import { difficultyLines, hubLines, resultKey, type Game } from '../game/state.js';
@@ -56,8 +56,10 @@ export class GameRenderer {
       top = [...masthead, green(shining ? '✦ LEVEL CLEAR ✦' : 'LEVEL CLEAR'),
         game.course?.practiceId ? cyan(topicFor(game.course.topicId)!.title) : `${faint('LESSON')} ${game.lesson + 1} ${game.progress.completed}/${LESSON_COUNT}`];
       const budget = height - top.length - 1;
+      const topic = topicFor(game.course?.topicId ?? null);
+      const topicReward = topic && game.course?.practiceId === topicPracticeId(topic);
       middle = lesson.badge ? [`${pink(game.newUnlock ? 'NEW REWARD' : 'REWARD')} ${gold(shining ? `✦ ${lesson.badge} ✦` : `[ ${lesson.badge} ]`)}`] :
-        [green('STAGE CLEAR')];
+        [topicReward ? `${gold('BADGES')} ${topic.commands.map(command => green(`[${command}]`)).join(' ')}` : green('STAGE CLEAR')];
       if (result) {
         middle.push(...resultPanel(result, game.checkpointScores, width, budget - middle.length));
       }
@@ -93,7 +95,7 @@ export class GameRenderer {
         ...(width < BOX_MIN_WIDTH ? [pink(lessonName)] : [])]),
         ...wrapTextWithAnsi(instruction, width),
         ...(lesson.goals ? [gold(`GOAL ${game.checkpoint + 1}/${lesson.goals.length}`)] : []),
-        ...(lesson.goals ? wrapTextWithAnsi(`${gold('USE')} ${lesson.goals[game.checkpoint]!.requiredCommands.join(' ')}`, width) : []),
+        ...(lesson.goals ? wrapTextWithAnsi(`${gold('USE')} ${lesson.goals[game.checkpoint]!.requiredCommands.map(command => `[${command}]`).join(' ')}`, width) : []),
         ...(lesson.editing ? wrapTextWithAnsi(`${gold('FILE')} ${game.edit?.lines.join('\n') !== game.edit?.savedLines.join('\n') ? '[+]' : game.edit?.saved ? 'saved' : ''} ${lesson.editing.filename}`, width) :
         [`${gold('TARGET')} ${game.checkpoint + 1}/${lesson.checkpoints.length} ${faint(`@ ${goal.row + 1}:${goal.col + 1}`)}${width >= WIDE_VIEW_WIDTH ? ` ${dots(game.checkpoint, lesson.checkpoints.length)}` : ''}`]),
         ...(lesson.editing ? wrapTextWithAnsi(`${gold('TARGET')} ${editingMismatch(game.edit!.lines, lesson.editing.expected) ?? 'Match reached. Save with :w.'}`, width) :

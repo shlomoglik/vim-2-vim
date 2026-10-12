@@ -35,7 +35,7 @@ export class LessonCatalog {
 
   createById(id: string, difficulty: Difficulty, unlocked: readonly Motion[], earned: readonly string[] = unlocked): Lesson {
     const topic = courseTopics.find(topic => topicPracticeId(topic) === id);
-    if (topic) return createTopicPractice(topic, earned);
+    if (topic) return createTopicPractice(topic, earned, difficulty);
     const index = stageIds.indexOf(id as typeof stageIds[number]);
     if (index >= 0) return this.create(index, difficulty, unlocked);
     const practice = extraPractices.get(id);

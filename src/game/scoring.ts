@@ -1,14 +1,15 @@
 import { CENTISECOND_MS, CENTISECONDS_PER_MINUTE, CENTISECONDS_PER_SECOND, MAX_CHECKPOINT_SPEED, MAX_SCORE, MIN_ELAPSED_MS, PAR_MS_PER_KEY } from './constants.js';
 
-// Vim Hero's public challenge scores each target against an ideal key sequence.
-// Its default par is 250 ms per ideal key; speed may reach 110% per target,
-// then the displayed lesson score is capped at 100%.
+// Legacy targets retain their 250 ms par. Puzzle sessions add a difficulty pace
+// and thinking time per goal. Speed may reach 110%; lesson scores cap at 100%.
 export { PAR_MS_PER_KEY } from './constants.js';
 
 export type CheckpointScore = {
   idealKeys: number;
   actualKeys: number;
   elapsedMs: number;
+  targetMs?: number;
+  pace?: { msPerKey: number; thinkingMs: number };
   speed: number;
   accuracy: number;
   expectedCommands?: number;
@@ -24,11 +25,14 @@ export type LessonResult = {
   proficiency: number;
 };
 
-export function scoreCheckpoint(idealKeys: number, actualKeys: number, elapsedMs: number): CheckpointScore {
-  if (idealKeys < 1 || actualKeys < 1 || elapsedMs < 0) throw new RangeError('Invalid checkpoint score input');
+export function scoreCheckpoint(idealKeys: number, actualKeys: number, elapsedMs: number, pace?: { msPerKey: number; thinkingMs: number }): CheckpointScore {
+  if (idealKeys < 1 || actualKeys < 1 || elapsedMs < 0 ||
+      pace && (!Number.isFinite(pace.msPerKey) || pace.msPerKey <= 0 || !Number.isFinite(pace.thinkingMs) || pace.thinkingMs < 0)) throw new RangeError('Invalid checkpoint score input');
+  const targetMs = idealKeys * (pace?.msPerKey ?? PAR_MS_PER_KEY) + (pace?.thinkingMs ?? 0);
   return {
     idealKeys, actualKeys, elapsedMs,
-    speed: Math.min(MAX_CHECKPOINT_SPEED, (idealKeys * PAR_MS_PER_KEY / Math.max(elapsedMs, MIN_ELAPSED_MS)) * MAX_SCORE),
+    ...(pace ? { targetMs, pace } : {}),
+    speed: Math.min(MAX_CHECKPOINT_SPEED, (targetMs / Math.max(elapsedMs, MIN_ELAPSED_MS)) * MAX_SCORE),
     accuracy: Math.min(MAX_SCORE, (idealKeys / actualKeys) * MAX_SCORE),
   };
 }

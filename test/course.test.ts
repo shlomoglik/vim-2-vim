@@ -5,7 +5,9 @@ import { test } from 'node:test';
 import { courseEntries, newCourseState } from '../src/course/browser.js';
 import { animatedDemo, DEMO_COMPLETE_MS, DEMO_STEP_MS, newDemo, stepDemo } from '../src/course/demo.js';
 import { courseMotions, courseSections, courseTopics, examplePracticeId, extraPracticeIds, navigationCommands, topicPracticeId, topicPracticeIds } from '../src/course/curriculum.js';
-import { createExamplePractice, createTopicPractice, validateExample } from '../src/course/practices.js';
+import { createExamplePractice, createTopicPractice, practiceGoalCount, validateExample } from '../src/course/practices.js';
+import { topicPuzzles } from '../src/course/puzzles.js';
+import { scoreCheckpoint } from '../src/game/scoring.js';
 import { play } from '../src/game/play.js';
 import { newGame, resultKey } from '../src/game/state.js';
 import { loadProgress, saveProgress } from '../src/persistence/progress.js';
@@ -294,7 +296,7 @@ test('basic movement does not duplicate focused goals as review', () => {
   const topic = courseTopics.find(topic => topic.id === 'basic-movement')!;
   const lesson = createTopicPractice(topic);
   assert.ok(lesson.goals!.every(goal => goal.focus));
-  assert.deepEqual(lesson.goals!.slice(0, 8).map(goal => goal.keys.join('')), ['h', 'j', 'k', 'l', 'h', 'j', 'k', 'l']);
+  assert.ok(lesson.goals!.some(goal => goal.keys.length > 1));
   assert.deepEqual(lesson.goals![4]!.start, lesson.goals![3]!.target);
 
   const withReview = createTopicPractice(topic, ['topic:word-movement']);
@@ -303,10 +305,10 @@ test('basic movement does not duplicate focused goals as review', () => {
   assert.ok(review.every(goal => !['h', 'j', 'k', 'l'].includes(goal.keys.join(''))));
 });
 
-test('every topic practice clears 60 or more goals and covers its whole command group', () => {
-  for (const earned of [[], [...navigationCommands, ...courseTopics.map(previous => `topic:${previous.id}`)]]) for (const topic of courseTopics) {
-    const lesson = createTopicPractice(topic, earned);
-    assert.ok(lesson.goals!.length >= 60);
+test('every topic practice stays within its budget and clears with its authored routes', () => {
+  for (const difficulty of difficulties) for (const earned of [[], [...navigationCommands, ...courseTopics.map(previous => `topic:${previous.id}`)]]) for (const topic of courseTopics) {
+    const lesson = createTopicPractice(topic, earned, difficulty);
+    assert.equal(lesson.goals!.length, practiceGoalCount(topic, difficulty));
     assert.ok(lesson.goals!.filter(goal => goal.focus).length >= Math.ceil(lesson.goals!.length / 3));
     for (const example of topic.examples) assert.ok(lesson.goals!.some(goal => goal.focus && goal.keys.join('').includes(example.keys.join(''))));
     let game = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
@@ -318,6 +320,7 @@ test('every topic practice clears 60 or more goals and covers its whole command 
         if (game.checkpoint > index) break;
       }
       assert.equal(game.checkpoint, index + 1, `${topic.id}: goal ${index + 1}`);
+      assert.equal(game.checkpointScores[index]!.accuracy, 100, `${topic.id}: solution should earn full accuracy`);
       assert.equal(game.phase, index === lesson.goals!.length - 1 ? 'reward' : 'play', topic.id);
       const next = lesson.goals![index + 1];
       if (next) {
@@ -337,12 +340,15 @@ test('every topic practice clears 60 or more goals and covers its whole command 
   }
 });
 
-test('review includes every earned movement badge and keeps editing command contexts distinct', () => {
+test('review selects earned tools within the budget and keeps editing contexts distinct', () => {
   const topic = courseTopics.find(topic => topic.id === 'WORD-movement')!;
   const lesson = createTopicPractice(topic, ['f', 'F', 't', 'T', ';', ',', '/', '?', 'n', 'N', '%', 'Counts', 'topic:open-lines']);
   const review = lesson.goals!.filter(goal => !goal.focus);
   const commands = new Set(review.flatMap(goal => [...goal.requiredCommands]));
-  for (const key of ['f', 'F', 't', 'T', ';', ',', '/', '?', 'n', 'N', '%', 'Counts', 'o', 'O']) assert.ok(commands.has(key), key);
+  assert.ok(commands.has('w'));
+  assert.ok(review.some(goal => goal.requiredCommands.some(command => ['f', 'F', 'Counts'].includes(command))));
+  assert.ok(review.length <= 20);
+  assert.ok(!commands.has('yy'));
   assert.ok(review.every(goal => !goal.instruction.includes('Visual')));
   const targets = new Set(lesson.goals!.filter(goal => goal.focus).map(goal => JSON.stringify([goal.start, goal.target])));
   assert.ok(targets.size > topic.examples.length);
@@ -422,19 +428,19 @@ test('reward explains percentage targets and actuals, including missed commands'
     assert.ok(lines.every(line => visibleWidth(line) <= width!));
     const plain = lines.join('\n').replace(/\x1b\[[0-9;]*m/g, '');
     assert.match(plain, /TARGET \/ ACTUAL/);
-    assert.match(plain, /SPEED.*23%/);
+    assert.match(plain, /SPEED.*100%/);
     assert.match(plain, /ACCURACY.*0%/);
-    assert.match(plain, /PROFICIENCY.*12%/);
+    assert.match(plain, /PROFICIENCY.*50%/);
     assert.match(plain, /Keys[: ]+1 (ideal )?\/ 8/);
-    assert.match(plain, /250\s?ms/);
+    assert.match(plain, /500\s?ms/);
     assert.match(plain, /Back to practice/);
     if (width! < 46) {
-      assert.match(plain, /Time 0.25s \/ 1.08s/);
+      assert.match(plain, /Time 2.50s \/ 1.08s/);
       assert.match(plain, /Badges 1 \/ 0 matched/);
       assert.match(plain, /Target 100%; \(S\+A\)\/2/);
       assert.match(plain, /Scores: goal averages/);
     } else {
-      assert.match(plain, /Time: 00:00.25 target \/ 00:01.08 actual/);
+      assert.match(plain, /Time: 00:02.50 target \/ 00:01.08 actual/);
       assert.match(plain, /Expected commands: 1 target \/ 0 matched/);
       assert.match(plain, /command match rate/);
       assert.match(plain, /average goal scores/);
@@ -564,4 +570,37 @@ test('example input grows one key at a time and highlights the current key', () 
     if (step < 3) assert.ok(input.includes(`\x1b[1;30;102m[${example.keys[step]}]`));
     else assert.ok(!input.includes('\x1b[1;30;102m'));
   }
+});
+
+
+test('puzzles combine learned tools and independently authored editing targets', () => {
+  const words = courseTopics.find(topic => topic.id === 'WORD-movement')!;
+  const puzzle = topicPuzzles(words, [])[0]!;
+  const lesson = createExamplePractice(words, puzzle);
+  assert.equal(lesson.lines[lesson.checkpoints[0]!.row]![lesson.checkpoints[0]!.col], 'm');
+  assert.equal(puzzle.keys.join(''), 'WWwllk');
+  assert.ok(!topicPuzzles(words, []).some(example => example.keys.join('').startsWith('2W')));
+  const counted = topicPuzzles(words, ['Counts']).find(example => example.keys.join('').startsWith('2W'))!;
+  assert.deepEqual(createExamplePractice(words, counted).checkpoints, lesson.checkpoints);
+  for (const id of ['copy-paste', 'edit-lines']) {
+    const topic = courseTopics.find(topic => topic.id === id)!;
+    for (const puzzle of topicPuzzles(topic, [])) validateExample(puzzle);
+    assert.ok(createTopicPractice(topic).goals!.some(goal => goal.instruction.startsWith('Quest')));
+  }
+});
+
+test('puzzle pace includes thinking time, varies by difficulty, and preserves legacy scoring', () => {
+  const topic = courseTopics.find(topic => topic.id === 'WORD-movement')!;
+  for (const difficulty of difficulties) {
+    const lesson = createTopicPractice(topic, [], difficulty);
+    const targetMs = 5 * lesson.pace!.msPerKey + lesson.pace!.thinkingMs;
+    const score = scoreCheckpoint(5, 5, targetMs, lesson.pace);
+    assert.equal(score.speed, 100);
+    assert.equal(score.targetMs, targetMs);
+    const game = { ...newGame(), phase: 'course' as const, progress: { ...newGame().progress, difficulty },
+      course: { ...newCourseState(), expandedTopics: [topic.id] } };
+    assert.ok(courseEntries(game).some(entry => entry.label.includes(`${lesson.goals!.length} goals`)));
+  }
+  assert.equal(scoreCheckpoint(5, 5, 1250).speed, 100);
+  assert.throws(() => scoreCheckpoint(5, 5, 100, { msPerKey: 0, thinkingMs: 0 }), RangeError);
 });

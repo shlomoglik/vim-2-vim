@@ -22,7 +22,9 @@ function shortTime(ms: number): string {
 }
 
 export function resultPanel(result: LessonResult, scores: readonly CheckpointScore[], width: number, rows: number): string[] {
-  const targetTime = result.idealKeys * PAR_MS_PER_KEY;
+  const targetTime = scores.length ? scores.reduce((sum, score) => sum + (score.targetMs ?? score.idealKeys * PAR_MS_PER_KEY), 0) : result.idealKeys * PAR_MS_PER_KEY;
+  const pace = scores[0]?.pace;
+  const paceLabel = pace ? `${pace.msPerKey}ms/key + ${pace.thinkingMs / 1000}s thinking/goal` : `${PAR_MS_PER_KEY}ms per ideal key`;
   const expected = scores.reduce((sum, score) => sum + (score.expectedCommands ?? 0), 0);
   const matched = scores.reduce((sum, score) => sum + (score.matchedCommands ?? 0), 0);
   const timeColor = result.elapsedMs <= targetTime ? green : pink;
@@ -34,7 +36,7 @@ export function resultPanel(result: LessonResult, scores: readonly CheckpointSco
     '',
     meter('SPEED', result.speed, false),
     `${faint('Time:')} ${cyan(formatTime(targetTime))} ${faint('target /')} ${timeColor(formatTime(result.elapsedMs))} ${faint('actual')}`,
-    faint(`100% pace = ${PAR_MS_PER_KEY} ms per ideal key.`),
+    faint(pace ? `100% pace: ${paceLabel}.` : `100% pace = ${PAR_MS_PER_KEY} ms per ideal key.`),
     faint('Per goal: target time / actual time.'),
     '',
     meter('ACCURACY', result.accuracy, false),
@@ -52,7 +54,7 @@ export function resultPanel(result: LessonResult, scores: readonly CheckpointSco
     legend,
     meter('SPEED', result.speed, true),
     `${faint('Time')} ${cyan(shortTime(targetTime))} ${faint('/')} ${timeColor(shortTime(result.elapsedMs))}`,
-    faint(`${PAR_MS_PER_KEY}ms per ideal key`),
+    faint(paceLabel),
     meter('ACCURACY', result.accuracy, true),
     `${faint('Keys')} ${cyan(String(result.idealKeys))} ${faint('/')} ${keysColor(String(result.actualKeys))}`,
     ...(expected ? [`${faint('Badges')} ${cyan(String(expected))} ${faint('/')} ${matchColor(String(matched))} ${faint('matched')}`] : []),
