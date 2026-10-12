@@ -1,4 +1,4 @@
-import { coursePracticeIds, practiceTitle, topicFor } from '../course/curriculum.js';
+import { coursePracticeIds, topicFor } from '../course/curriculum.js';
 import { truncateToWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import { formatTime } from '../game/scoring.js';
 import { difficultyLines, hubLines, resultKey, type Game } from '../game/state.js';
@@ -9,8 +9,7 @@ import { editingMismatch } from './editingPreview.js';
 import { fitHeight } from './layout.js';
 import { courseScreen } from './panels/course.js';
 import { editorPanel } from './panels/editor.js';
-import { frame } from './panels/frame.js';
-import { meter, motionGuidePanel } from './panels/reward.js';
+import { motionGuidePanel, resultPanel } from './panels/reward.js';
 import { courseOptions, selectorPanel } from './panels/selector.js';
 import { statsBody } from './panels/stats.js';
 import { badgeDisplay, cyan, dots, faint, gold, green, keycap, paint, pink, rule } from './styles.js';
@@ -57,19 +56,15 @@ export class GameRenderer {
       top = [...masthead, green(shining ? '✦ LEVEL CLEAR ✦' : 'LEVEL CLEAR'),
         game.course?.practiceId ? cyan(topicFor(game.course.topicId)!.title) : `${faint('LESSON')} ${game.lesson + 1} ${game.progress.completed}/${LESSON_COUNT}`];
       const budget = height - top.length - 1;
-      middle = lesson.badge ? [`${pink(game.newUnlock ? 'NEW REWARD' : 'REWARD')} ${gold(shining ? `✦ ${lesson.badge} ✦` : `[ ${lesson.badge} ]`)}`,
-        ...(game.course ? [] : motionGuidePanel(lesson.badge, width, nowMs - (game.lastHitAtMs ?? nowMs), cursorShade(nowMs)))] :
-        [green('STAGE CLEAR'), faint(lesson.editing ? `${lesson.editing.filename} saved` : 'Review complete')];
+      middle = lesson.badge ? [`${pink(game.newUnlock ? 'NEW REWARD' : 'REWARD')} ${gold(shining ? `✦ ${lesson.badge} ✦` : `[ ${lesson.badge} ]`)}`] :
+        [green('STAGE CLEAR')];
       if (result) {
-        const compact = width < BOX_MIN_WIDTH || budget < middle.length + 7;
-        middle.push(...(compact ? [
-          `${cyan('TIME')} ${formatTime(result.elapsedMs)}${width >= BOX_MIN_WIDTH ? ` ${faint(`· ${result.actualKeys} keys`)}` : ''}`,
-          `SPEED ${result.speed}%  ACC ${result.accuracy}%`, `PROFICIENCY ${result.proficiency}%`,
-        ] : [...frame([
-          `${cyan('TIME')} ${formatTime(result.elapsedMs)} ${faint(`· ${result.actualKeys} keys`)}`,
-          meter('SPEED', result.speed, width < BOX_MIN_WIDTH), meter('ACCURACY', result.accuracy, width < BOX_MIN_WIDTH),
-          meter('PROFICIENCY', result.proficiency, width < BOX_MIN_WIDTH),
-        ], width), faint('Accuracy = ideal keys / keys used')]));
+        middle.push(...resultPanel(result, game.checkpointScores, width, budget - middle.length));
+      }
+      if (lesson.editing && middle.length < budget) middle.push(faint(`${lesson.editing.filename} saved`));
+      if (lesson.badge && !game.course) {
+        const guide = motionGuidePanel(lesson.badge, width, nowMs - (game.lastHitAtMs ?? nowMs), cursorShade(nowMs));
+        if (middle.length + guide.length <= budget) middle.push(...guide);
       }
       bottom = [keycap('↵', game.course?.practiceId ? 'Back to practice' : 'Continue')];
     } else if (game.phase === 'hub' || game.phase === 'difficulty') {
@@ -86,12 +81,8 @@ export class GameRenderer {
       middle = [...selectorPanel(options, cursor, width, selectingDifficulty ? 'difficulty.txt' : 'course.txt', visibleRows, game.command.pending,
         selectingDifficulty ? undefined : game.progress.completed, selectingDifficulty ? 0 : 2), ...note];
     } else if (game.phase === 'stats') {
-      const practice = game.course ? game.statsPracticeId ?? coursePracticeIds[0]! : null;
-      const title = practice ? practiceTitle(practice) : hubLines[game.lesson]!;
-      top = [...masthead, cyan(`STATS · ${game.progress.difficulty.toUpperCase()}`),
-        practice ? cyan(truncateToWidth(title, width)) : `${gold(`LESSON ${game.lesson + 1}/${LESSON_COUNT}`)} ${faint(title)}`,
-        `${faint('BADGES')} ${badgeDisplay(game.progress.badges, width)}`];
-      bottom = [faint('h/l lesson · j/k history'), keycap('↵', game.course ? 'Back to lessons' : 'Back to hub')];
+      top = [...masthead, cyan(`STATS · ${game.progress.difficulty.toUpperCase()}`)];
+      bottom = [`${paint('1', 'Enter')} ${faint('/')} ${paint('1', 'Esc')} ${faint(game.course ? 'Back to lessons' : 'Back to hub')}`];
       middle = statsBody(game, width, height - top.length - bottom.length);
     } else {
       const lesson = game.activeLesson!;

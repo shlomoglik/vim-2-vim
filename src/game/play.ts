@@ -10,13 +10,23 @@ import { unlockedCommands, type Game } from './state.js';
 function completeGoal(game: Game, nowMs: number, timestamp?: () => string): Game {
   const lesson = game.activeLesson!;
   const score = scoreCheckpoint(lesson.idealKeys[game.checkpoint]!, game.keysThisCheckpoint, nowMs - game.checkpointAtMs!);
+  const required = lesson.goals![game.checkpoint]!.requiredCommands;
+  const used = lesson.editing ? game.edit!.used : game.usedCommands.slice(game.goalCommandOffset ?? 0);
+  if (required.length) {
+    score.expectedCommands = required.length;
+    score.matchedCommands = required.filter(command => used.includes(command)).length;
+    score.accuracy *= score.matchedCommands / score.expectedCommands;
+  }
   const checkpointScores = [...game.checkpointScores, score];
   const checkpoint = game.checkpoint + 1;
   const hit = { ...game, checkpoint, checkpointScores, checkpointAtMs: nowMs, keysThisCheckpoint: 0,
     lastHit: game.cursor, lastHitAtMs: nowMs, message: 'Goal complete!' };
   if (checkpoint === lesson.checkpoints.length) return finishLesson(hit, scoreLesson(checkpointScores, nowMs - game.startedAtMs!), nowMs, timestamp);
   const next = practiceGoal(lesson, checkpoint);
-  return { ...hit, activeLesson: next, cursor: { ...next.start }, command: { ...game.command, pending: '', lastFind: null, lastSearch: null, preferredCol: null },
+  const board = game.edit?.lines ?? lesson.lines;
+  const sameBoard = board.length === next.lines.length && board.every((line, row) => line === next.lines[row]);
+  const cursor = sameBoard ? { ...game.cursor } : { ...next.start };
+  return { ...hit, activeLesson: { ...next, start: cursor }, cursor, command: { ...game.command, pending: '', lastFind: null, lastSearch: null, preferredCol: null },
     edit: next.editing ? newEdit(next.lines) : null, goalCommandOffset: game.usedCommands.length, lastHit: null };
 }
 
@@ -33,8 +43,6 @@ export function play(game: Game, key: string, nowMs = performance.now(), timesta
     if (outcome.quit && !correct) return { ...timed, phase: 'hub', activeLesson: null, message: 'File saved. Return to finish the repair.' };
     if (!correct || !outcome.edit.saved) return timed;
     if (lesson.goals) {
-      const missing = lesson.goals[game.checkpoint]!.requiredCommands.filter(command => !outcome.edit.used.includes(command));
-      if (missing.length) return { ...timed, message: `Use these commands for this goal: ${missing.join(' ')}` };
       return completeGoal(timed, nowMs, timestamp);
     }
     return finishLesson(timed, scoreLesson([scoreCheckpoint(lesson.idealKeys[0]!, timed.keysThisCheckpoint, nowMs - timed.startedAtMs!)], nowMs - timed.startedAtMs!), nowMs, timestamp);
@@ -48,9 +56,6 @@ export function play(game: Game, key: string, nowMs = performance.now(), timesta
   const goal = lesson.checkpoints[game.checkpoint]!;
   if (!outcome.moved || cursor.row !== goal.row || cursor.col !== goal.col) return { ...timed, cursor, message: outcome.message };
   if (lesson.goals) {
-    const used = timed.usedCommands.slice(game.goalCommandOffset ?? 0);
-    const missing = lesson.goals[game.checkpoint]!.requiredCommands.filter(command => !used.includes(command));
-    if (missing.length) return { ...timed, cursor, message: `Use these commands for this goal: ${missing.join(' ')}` };
     return completeGoal({ ...timed, cursor }, nowMs, timestamp);
   }
   const score = scoreCheckpoint(lesson.idealKeys[game.checkpoint]!, timed.keysThisCheckpoint, nowMs - timed.checkpointAtMs!);

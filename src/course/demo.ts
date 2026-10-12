@@ -4,6 +4,7 @@ import { navigationCommands } from './curriculum.js';
 import type { CourseExample, DemoState } from './types.js';
 
 export const DEMO_STEP_MS = 700;
+export const DEMO_COMPLETE_MS = 3500;
 export function newDemo(example: CourseExample, index = 0, startedAtMs = 0): DemoState {
   return { index, step: 0, cursor: { ...example.start }, command: emptyCommand(), edit: example.expected ? newEdit(example.lines) : null, message: '', startedAtMs };
 }
@@ -19,8 +20,9 @@ export function stepDemo(example: CourseExample, demo: DemoState): DemoState {
 }
 
 export function animatedDemo(example: CourseExample, demo: DemoState, nowMs: number): DemoState {
-  const cycleSteps = example.keys.length + 2;
-  const step = Math.min(example.keys.length, Math.floor(Math.max(0, nowMs - demo.startedAtMs) / DEMO_STEP_MS) % cycleSteps);
+  const cycleMs = example.keys.length * DEMO_STEP_MS + DEMO_COMPLETE_MS;
+  const elapsedMs = Math.max(0, nowMs - demo.startedAtMs) % cycleMs;
+  const step = Math.min(example.keys.length, Math.floor(elapsedMs / DEMO_STEP_MS));
   let state = newDemo(example, demo.index, demo.startedAtMs);
   for (let index = 0; index < step; index++) state = stepDemo(example, state);
   return state;

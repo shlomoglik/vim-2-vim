@@ -1,4 +1,4 @@
-export const SCORING_VERSION = 2;
+export const SCORING_VERSION = 3;
 export const DEFAULT_DIFFICULTY = 'normal' as const;
 export const PAR_MS_PER_KEY = 250;
 export const MAX_CHECKPOINT_SPEED = 110;

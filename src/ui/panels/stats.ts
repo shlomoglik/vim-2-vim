@@ -1,23 +1,22 @@
 import { coursePracticeIds, practiceTitle } from '../../course/curriculum.js';
-import { truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
-import { formatTime, previousComparableAttempt, scoreCourse } from '../../game/scoring.js';
+import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
+import { formatTime, previousComparableAttempt } from '../../game/scoring.js';
 import { hubLines, resultKey, type Game } from '../../game/state.js';
-import { badges as courseBadges } from '../../lessons/catalog.js';
 import { LESSON_COUNT } from '../../lessons/index.js';
-import { BOX_MIN_WIDTH, PANEL_WIDTH } from '../constants.js';
+import { BOX_MIN_WIDTH } from '../constants.js';
 import { viewportStart } from '../layout.js';
-import { badgeDisplay, cyan, faint, gold, pink } from '../styles.js';
+import { cyan, faint, green, paint } from '../styles.js';
 
-const signed = (value: number) => `${value >= 0 ? '+' : ''}${value}`;
+const STATS_WIDTH = 80;
 function attemptDate(iso: string | null): string {
-  if (!iso) return 'legacy';
+  if (!iso) return 'Date unavailable';
   const date = new Date(iso);
   const two = (value: number) => String(value).padStart(2, '0');
   return `${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
 }
 function statsBox(rows: (string | null)[], width: number): string[] {
   if (width < BOX_MIN_WIDTH) return rows.map(row => row === null ? faint('─'.repeat(width)) : row);
-  const boxWidth = Math.min(width, PANEL_WIDTH);
+  const boxWidth = Math.min(width, STATS_WIDTH);
   const inner = boxWidth - 4;
   return [cyan(`╭${'─'.repeat(boxWidth - 2)}╮`),
     ...rows.map(row => {
@@ -27,90 +26,62 @@ function statsBox(rows: (string | null)[], width: number): string[] {
     }), cyan(`╰${'─'.repeat(boxWidth - 2)}╯`)];
 }
 
-function lessonSelector(selected: number, width: number): string[] {
-  const rows: string[] = [];
-  let row = '';
-  for (let index = 0; index < LESSON_COUNT; index++) {
-    const number = String(index + 1);
-    const token = index === selected ? cyan(`[${number}]`) : faint(number);
-    if (row && visibleWidth(row) + 2 + visibleWidth(token) > width) {
-      rows.push(row);
-      row = token;
-    } else row += `${row ? '  ' : ''}${token}`;
-  }
-  if (row) rows.push(row);
-  return rows;
-}
-
 export function statsBody(game: Game, width: number, budget: number): string[] {
   const practice = game.course ? game.statsPracticeId ?? coursePracticeIds[0]! : null;
   const selectedIndex = practice ? coursePracticeIds.indexOf(practice) : game.lesson;
   const total = practice ? coursePracticeIds.length : LESSON_COUNT;
+  const titleAt = (index: number) => practice ? practiceTitle(coursePracticeIds[index]!) : hubLines[index]!.replace(/^\d+\s+/, '');
   const key = practice ? `${game.progress.difficulty}:${practice}` : resultKey(game.progress.difficulty, game.lesson);
   const history = game.progress.attempts[key] ?? [];
-  const latest = history.at(-1);
-  const previous = previousComparableAttempt(history);
-  const inner = width >= BOX_MIN_WIDTH ? Math.min(width, PANEL_WIDTH) - 4 : width;
-  const narrow = inner < 36;
-  const lessons = practice ? [] : lessonSelector(game.lesson, inner);
-  const title = practice ? practiceTitle(practice) : hubLines[game.lesson]!.replace(/^\d+\s+/, '');
-  const overview: (string | null)[] = [
-    `${pink('STATS')} ${faint('·')} ${cyan(game.progress.difficulty.toUpperCase())}`,
-    `${gold('LESSONS')} ${faint(`${selectedIndex + 1} / ${total}`)}`,
-    ...lessons,
-    faint('h / l  change lesson'),
-    `${cyan(String(selectedIndex + 1).padStart(2, '0'))}  ${title}`,
-    latest ? `${gold('LATEST')} ${formatTime(latest.elapsedMs)}${narrow ? '' : `  ${faint(`· ${history.length} attempts`)}`}` :
-      faint(narrow ? 'No attempts yet' : 'No attempts yet. Play this lesson.'),
+  const offset = Math.min(game.statsOffset, Math.max(0, history.length - 1));
+  const selected = history[history.length - 1 - offset];
+  const inner = width >= BOX_MIN_WIDTH ? Math.min(width, STATS_WIDTH) - 4 : width;
+  const room = budget - (width >= BOX_MIN_WIDTH ? 2 : 0);
+  const rows: (string | null)[] = [
+    `${faint(practice ? 'Practice' : 'Lesson')} ${cyan(`${selectedIndex + 1} of ${total}`)}`,
+    ...wrapTextWithAnsi(paint('1', titleAt(selectedIndex)), inner).slice(0, room >= 16 ? 2 : 1),
+    inner >= 44 ? `${paint('1', 'h')} ${faint('← Previous practice · Next practice →')} ${paint('1', 'l')}` :
+      `${paint('1', 'h')} ${faint('← prev · next →')} ${paint('1', 'l')}`,
   ];
-  if (latest) overview.push(narrow ? `S${latest.speed}%  A${latest.accuracy}%  P${latest.proficiency}%` :
-    `${faint('SPEED')} ${latest.speed}%   ${faint('ACC')} ${latest.accuracy}%   ${faint('PROF')} ${latest.proficiency}%`);
-
-  const historyHeader = `${gold('HISTORY')} ${faint(history.length ? `${game.statsOffset + 1} / ${history.length}` : '0 attempts')}`;
-  const historyHint = faint('j / k  browse attempts');
-  const borderRows = width >= BOX_MIN_WIDTH ? 2 : 0;
-  const minimumHistoryRows = 1;
-  if (overview.length + borderRows + 3 > budget && latest) overview.pop();
-  if (overview.length + borderRows + 3 > budget) overview.splice(3 + lessons.length, 1);
-  let spare = budget - borderRows - overview.length - 1 - minimumHistoryRows - 1;
-  if (spare > 0) { overview.splice(3 + lessons.length, 0, null); spare--; }
-  if (spare > 0 && game.progress.badges.length) {
-    const badgesLine = `${faint('BADGES')} ${badgeDisplay(game.progress.badges, inner)}`;
-    const compactBadges = `${faint('BADGES')} ${game.progress.badges.length}/${courseBadges.length}${inner >= BOX_MIN_WIDTH ? `  ${gold(`[${game.progress.badges.at(-1)}]`)}` : ''}`;
-    overview.splice(5 + lessons.length, 0, visibleWidth(badgesLine) <= inner ? badgesLine : compactBadges);
-    spare--;
+  const addContext = room >= 24 && inner >= 40;
+  if (addContext) {
+    rows.push(faint(selectedIndex > 0 ? `Previous: ${titleAt(selectedIndex - 1)}` : 'First practice'),
+      faint(selectedIndex < total - 1 ? `Next: ${titleAt(selectedIndex + 1)}` : 'Last practice'), null);
   }
-  if (spare > 0) { overview.push(null); spare--; }
-  if (spare > 0 && previous && latest) {
-    const delta = latest.elapsedMs - previous.elapsedMs;
-    overview.push(`${pink('VS PRIOR')} ${formatTime(Math.abs(delta))} ${delta <= 0 ? 'faster' : 'slower'}`);
-    spare--;
-  }
-  if (spare > 0 && previous && latest) {
-    overview.push(faint(`S${signed(latest.speed - previous.speed)}  A${signed(latest.accuracy - previous.accuracy)}  P${signed(latest.proficiency - previous.proficiency)}`));
-    spare--;
-  }
-  if (spare > 0) {
-    const results = Array.from({ length: LESSON_COUNT }, (_, index) => game.progress.results[resultKey(game.progress.difficulty, index)]);
-    if (results.every(Boolean)) {
-      const course = scoreCourse(results as NonNullable<typeof results[number]>[]);
-      if (course) { overview.push(`${gold('COURSE')} ${formatTime(course.elapsedMs)}  P${course.proficiency}%`); spare--; }
+  if (selected) {
+    rows.push(cyan(`Attempt ${history.length - offset} of ${history.length}`) + (offset === 0 ? ` ${faint('· LATEST')}` : ''),
+      `${faint('Time')} ${paint('1', formatTime(selected.elapsedMs))}`);
+    if (inner >= 48) rows.push(`${faint('Speed')} ${selected.speed}%  ${faint('Accuracy')} ${selected.accuracy}%  ${faint('Proficiency')} ${selected.proficiency}%`);
+    else rows.push(`${faint('Speed')} ${selected.speed}%`, `${faint('Accuracy')} ${selected.accuracy}%`, `${faint('Proficiency')} ${selected.proficiency}%`);
+    if (addContext) {
+      rows.push(faint(selected.completedAt ? `Completed ${attemptDate(selected.completedAt)}` : 'Date unavailable'));
+      const previous = previousComparableAttempt(history.slice(0, history.length - offset));
+      if (previous) {
+        const delta = selected.elapsedMs - previous.elapsedMs;
+        rows.push(delta === 0 ? faint('Same time as previous comparable attempt') :
+          `${delta < 0 ? green(formatTime(Math.abs(delta)) + ' faster') : paint('1', formatTime(delta) + ' slower')} ${faint('than previous comparable attempt')}`);
+      }
+      rows.push(...wrapTextWithAnsi(faint('Speed: pace vs target · Accuracy: key efficiency'), inner),
+        ...wrapTextWithAnsi(faint('Proficiency: average of speed and accuracy'), inner));
+      if (selected.commandsUsed?.length) rows.push(`${faint('Keys used')} ${selected.commandsUsed.join(' ')}`);
     }
-  }
-  if (spare > 0) { overview.push(null); spare--; }
-  const selectedCommands = history[history.length - 1 - game.statsOffset]?.commandsUsed;
-  const commandsLine = spare > 0 && selectedCommands?.length ? `${gold('USED')} ${selectedCommands.join(' ')}` : null;
-  const visibleRecords = Math.min(history.length, Math.max(1, spare + minimumHistoryRows - (commandsLine ? 1 : 0)));
-  const first = viewportStart(history.length, visibleRecords, game.statsOffset);
-  const records = history.length ? Array.from({ length: visibleRecords }, (_, offset) => {
-    const index = first + offset;
-    const record = history[history.length - 1 - index]!;
-    const label = inner < 30 ? `#${history.length - index} ${formatTime(record.elapsedMs)} P${record.proficiency}` :
-      narrow ? `#${history.length - index} ${formatTime(record.elapsedMs)} S${record.speed} A${record.accuracy} P${record.proficiency}` :
-      `#${history.length - index}  ${formatTime(record.elapsedMs)}  S${record.speed} A${record.accuracy} P${record.proficiency}`;
-    const line = narrow ? label : `${label}  ${attemptDate(record.completedAt)}`;
-    return index === game.statsOffset ? cyan(`› ${line}`) : `  ${faint(line)}`;
-  }) : [faint('  No history for this lesson')];
-  return statsBox([...overview, historyHeader, ...records, ...(commandsLine ? [commandsLine] : []), historyHint], width);
-}
+  } else rows.push(faint('No attempts yet.'), faint('Complete this practice'), faint('to see your scores here.'));
 
+  if (room - rows.length >= 5) rows.push(null);
+  rows.push(paint('1', 'Attempt history'),
+    `${paint('1', 'j')} ${faint('↓ older ·')} ${paint('1', 'k')} ${faint('↑ newer')}`);
+  const table = inner >= 52 && room - rows.length >= 3;
+  if (table) rows.push(faint(`  ${'Attempt'.padEnd(9)} ${'Time'.padEnd(10)} ${'Speed'.padStart(5)} ${'Accuracy'.padStart(8)} ${'Proficiency'.padStart(11)}`));
+  const visibleRecords = Math.min(history.length, Math.max(1, room - rows.length));
+  const first = viewportStart(history.length, visibleRecords, offset);
+  if (!history.length) rows.push(faint('No saved attempts'));
+  else for (let row = 0; row < visibleRecords; row++) {
+    const index = first + row;
+    const record = history[history.length - 1 - index]!;
+    const number = history.length - index;
+    const line = table ? `${('#' + number).padEnd(9)} ${formatTime(record.elapsedMs).padEnd(10)} ${(record.speed + '%').padStart(5)} ${(record.accuracy + '%').padStart(8)} ${(record.proficiency + '%').padStart(11)}` :
+      `#${number}  ${formatTime(record.elapsedMs)}${inner >= 30 ? `  ${record.proficiency}% overall` : ''}`;
+    rows.push(index === offset ? cyan(`› ${line}`) : `  ${line}`);
+  }
+  return statsBox(rows, width);
+}

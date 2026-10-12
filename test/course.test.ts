@@ -3,17 +3,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { courseEntries, newCourseState } from '../src/course/browser.js';
-import { animatedDemo, newDemo, stepDemo } from '../src/course/demo.js';
+import { animatedDemo, DEMO_COMPLETE_MS, DEMO_STEP_MS, newDemo, stepDemo } from '../src/course/demo.js';
 import { courseMotions, courseSections, courseTopics, examplePracticeId, extraPracticeIds, navigationCommands, topicPracticeId, topicPracticeIds } from '../src/course/curriculum.js';
 import { createExamplePractice, createTopicPractice, validateExample } from '../src/course/practices.js';
 import { play } from '../src/game/play.js';
-import { newGame } from '../src/game/state.js';
+import { newGame, resultKey } from '../src/game/state.js';
 import { loadProgress, saveProgress } from '../src/persistence/progress.js';
 import { editKey, newEdit } from '../src/vim/editing.js';
 import { GameEngine } from '../src/game/GameEngine.js';
 import { LessonCatalog } from '../src/lessons/LessonCatalog.js';
 import { difficulties, stageIds } from '../src/lessons/catalog.js';
 import { GameRenderer } from '../src/ui/GameRenderer.js';
+import { courseScreen } from '../src/ui/panels/course.js';
 import { emptyCommand, interpret } from '../src/vim/command.js';
 import { visibleWidth } from '@earendil-works/pi-tui';
 import assert from 'node:assert/strict';
@@ -39,7 +40,14 @@ test('worked examples replay their cursor movement before practice', () => {
   assert.equal(animatedDemo(example, demo, 1000).step, 0);
   assert.equal(animatedDemo(example, demo, 1700).step, 1);
   assert.notDeepEqual(animatedDemo(example, demo, 1700).cursor, example.start);
-  assert.equal(animatedDemo(example, demo, 3100).step, 0);
+  assert.equal(animatedDemo(example, demo, 3100).step, 1);
+  for (const topic of courseTopics) for (const example of topic.examples) {
+    const demo = newDemo(example, 0, 1000);
+    const completedAtMs = 1000 + example.keys.length * DEMO_STEP_MS;
+    assert.equal(animatedDemo(example, demo, completedAtMs).step, example.keys.length);
+    assert.equal(animatedDemo(example, demo, completedAtMs + DEMO_COMPLETE_MS - 1).step, example.keys.length);
+    assert.equal(animatedDemo(example, demo, completedAtMs + DEMO_COMPLETE_MS).step, 0);
+  }
 });
 
 test('focused practice attempts survive progress reload', () => {
@@ -102,7 +110,7 @@ test('all demonstrations can be stepped and replayed without modifying progress'
       const lines = renderer.render(game, width!, height!, 1000);
       assert.equal(lines.length, height);
       assert.ok(lines.every(line => visibleWidth(line) <= width!), `${topic.id}/${example.id}: ${width}`);
-      assert.match(lines.join('\n'), /Esc back/);
+      assert.match(lines.join('\n').replace(/\x1b\[[0-9;]*m/g, ''), /Esc back/);
     }
   }
 });
@@ -121,7 +129,13 @@ test('WORD practices save under stable IDs, resume their menu, and remain visibl
   engine.handleInput('p');
   assert.equal(engine.state.phase, 'play');
   assert.equal(engine.handleInput('W').persist, false);
-  for (const goal of engine.state.activeLesson!.goals!.slice(1)) for (const key of goal.keys) engine.handleInput(key);
+  for (const [index, goal] of engine.state.activeLesson!.goals!.entries()) {
+    if (index < engine.state.checkpoint) continue;
+    for (const key of goal.keys) {
+      engine.handleInput(key);
+      if (engine.state.checkpoint > index) break;
+    }
+  }
   assert.equal(engine.state.phase, 'reward');
   const id = engine.state.course!.practiceId!;
   assert.equal(engine.state.progress.completed, 0);
@@ -276,19 +290,47 @@ test('section headers are separate rows and are skipped by movement and searches
   assert.equal(selected().id, 'basic-movement');
 });
 
-test('every topic practice clears 60 or more interleaved goals and covers its whole command group', () => {
-  for (const topic of courseTopics) {
-    const lesson = createTopicPractice(topic, [...navigationCommands, ...courseTopics.map(previous => `topic:${previous.id}`)]);
+test('basic movement does not duplicate focused goals as review', () => {
+  const topic = courseTopics.find(topic => topic.id === 'basic-movement')!;
+  const lesson = createTopicPractice(topic);
+  assert.ok(lesson.goals!.every(goal => goal.focus));
+  assert.deepEqual(lesson.goals!.slice(0, 8).map(goal => goal.keys.join('')), ['h', 'j', 'k', 'l', 'h', 'j', 'k', 'l']);
+  assert.deepEqual(lesson.goals![4]!.start, lesson.goals![3]!.target);
+
+  const withReview = createTopicPractice(topic, ['topic:word-movement']);
+  const review = withReview.goals!.filter(goal => !goal.focus);
+  assert.ok(review.length > 0);
+  assert.ok(review.every(goal => !['h', 'j', 'k', 'l'].includes(goal.keys.join(''))));
+});
+
+test('every topic practice clears 60 or more goals and covers its whole command group', () => {
+  for (const earned of [[], [...navigationCommands, ...courseTopics.map(previous => `topic:${previous.id}`)]]) for (const topic of courseTopics) {
+    const lesson = createTopicPractice(topic, earned);
     assert.ok(lesson.goals!.length >= 60);
     assert.ok(lesson.goals!.filter(goal => goal.focus).length >= Math.ceil(lesson.goals!.length / 3));
-    for (const example of topic.examples) assert.ok(lesson.goals!.some(goal => goal.focus && goal.keys.join('').startsWith(example.keys.join(''))));
+    for (const example of topic.examples) assert.ok(lesson.goals!.some(goal => goal.focus && goal.keys.join('').includes(example.keys.join(''))));
     let game = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
       edit: lesson.editing ? newEdit(lesson.lines) : null,
       course: { ...newCourseState(), topicId: topic.id, practiceId: lesson.id } };
     for (const [index, goal] of lesson.goals!.entries()) {
-      for (const key of goal.keys) game = play(game, key, 1000 + index * 100) as typeof game;
+      for (const key of goal.keys) {
+        game = play(game, key, 1000 + index * 100) as typeof game;
+        if (game.checkpoint > index) break;
+      }
       assert.equal(game.checkpoint, index + 1, `${topic.id}: goal ${index + 1}`);
       assert.equal(game.phase, index === lesson.goals!.length - 1 ? 'reward' : 'play', topic.id);
+      const next = lesson.goals![index + 1];
+      if (next) {
+        const board = goal.editing?.expected ?? goal.lines;
+        const sameBoard = JSON.stringify(board) === JSON.stringify(next.lines);
+        if (sameBoard && !goal.editing) {
+          assert.deepEqual(game.cursor, goal.target, `${topic.id}: cursor jumped after goal ${index + 1}`);
+          assert.deepEqual(next.start, goal.target);
+        } else if (!sameBoard) {
+          assert.deepEqual(game.cursor, next.start, `${topic.id}: new board start`);
+        }
+        if (!next.editing) assert.notDeepEqual(game.cursor, next.target, `${topic.id}: target already reached`);
+      }
     }
     assert.equal(game.checkpointScores.length, lesson.goals!.length);
     assert.equal(game.progress.attempts[`normal:${lesson.id}`]?.length, 1);
@@ -306,7 +348,7 @@ test('review includes every earned movement badge and keeps editing command cont
   assert.ok(targets.size > topic.examples.length);
 });
 
-test('WORD practice includes h j k l, w e b, and enforces the focus command per goal', () => {
+test('WORD practice includes h j k l, w e b, and accepts alternate routes with lower accuracy', () => {
   const topic = courseTopics.find(topic => topic.id === 'WORD-movement')!;
   const lesson = createTopicPractice(topic);
   const commands = new Set(lesson.goals!.flatMap(goal => [...goal.requiredCommands]));
@@ -314,8 +356,104 @@ test('WORD practice includes h j k l, w e b, and enforces the focus command per 
   let game = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
     course: { ...newCourseState(), topicId: topic.id, practiceId: lesson.id } };
   for (let index = 0; index < 8; index++) game = play(game, 'l', 1000) as typeof game;
+  assert.equal(game.checkpoint, 1);
+  assert.equal(game.checkpointScores[0]!.accuracy, 0);
+  assert.equal(game.checkpointScores[0]!.actualKeys, 8);
+  assert.equal(game.checkpointScores[0]!.speed, 110);
+  const next = game.activeLesson!.goals![1]!;
+  for (const key of next.keys) {
+    game = play(game, key, 1100) as typeof game;
+    if (game.checkpoint > 1) break;
+  }
+  assert.equal(game.checkpoint, 2);
+  assert.equal(game.checkpointScores[1]!.accuracy, 100);
+});
+
+test('practice boards stay visible for at least five consecutive goals', () => {
+  for (const earned of [[], [...navigationCommands, ...courseTopics.map(topic => `topic:${topic.id}`)]]) {
+    for (const topic of courseTopics) {
+      const lesson = createTopicPractice(topic, earned);
+      let previous = '', count = 0;
+      for (const goal of lesson.goals!) {
+        const board = JSON.stringify(goal.lines);
+        if (board !== previous && count) {
+          assert.ok(count >= 5, `${topic.id}: board changed after ${count} goals`);
+          count = 0;
+        }
+        previous = board;
+        count++;
+      }
+      assert.ok(count >= 5, `${topic.id}: final board has ${count} goals`);
+    }
+  }
+});
+
+test('an alternate route leaves the cursor at the target for the next goal', () => {
+  const topic = courseTopics.find(topic => topic.id === 'basic-movement')!;
+  const lesson = createTopicPractice(topic);
+  let game = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
+    course: { ...newCourseState(), topicId: topic.id, practiceId: lesson.id } };
+  game = play(game, '0', 1000) as typeof game;
+  game = play(game, 'l', 1100) as typeof game;
+  assert.equal(game.checkpoint, 1);
+  assert.deepEqual(game.cursor, lesson.checkpoints[0]);
+  assert.deepEqual(game.activeLesson!.start, game.cursor);
+  assert.notDeepEqual(game.cursor, game.activeLesson!.checkpoints[1]);
+  for (const key of lesson.goals![1]!.keys) game = play(game, key, 1200) as typeof game;
+  assert.equal(game.checkpoint, 2);
+  assert.deepEqual(game.cursor, lesson.checkpoints[1]);
+});
+
+test('reward explains percentage targets and actuals, including missed commands', () => {
+  const topic = courseTopics.find(topic => topic.id === 'WORD-movement')!;
+  const practice = createTopicPractice(topic);
+  const lesson = { ...practice, goals: practice.goals!.slice(0, 1), checkpoints: practice.checkpoints.slice(0, 1),
+    idealKeys: practice.idealKeys.slice(0, 1), referenceRoutes: practice.referenceRoutes.slice(0, 1) };
+  let game = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
+    course: { ...newCourseState(), topicId: topic.id, practiceId: lesson.id } };
+  for (let index = 0; index < 8; index++) game = play(game, 'l', 1000 + index * 155) as typeof game;
+  assert.equal(game.phase, 'reward');
+  assert.equal(game.checkpointScores[0]!.expectedCommands, 1);
+  assert.equal(game.checkpointScores[0]!.matchedCommands, 0);
+  const renderer = new GameRenderer();
+  for (const [width, height] of [[22, 16], [32, 16], [32, 24], [46, 32], [80, 40]]) {
+    const lines = renderer.render(game, width!, height!, 3000);
+    assert.equal(lines.length, height);
+    assert.ok(lines.every(line => visibleWidth(line) <= width!));
+    const plain = lines.join('\n').replace(/\x1b\[[0-9;]*m/g, '');
+    assert.match(plain, /TARGET \/ ACTUAL/);
+    assert.match(plain, /SPEED.*23%/);
+    assert.match(plain, /ACCURACY.*0%/);
+    assert.match(plain, /PROFICIENCY.*12%/);
+    assert.match(plain, /Keys[: ]+1 (ideal )?\/ 8/);
+    assert.match(plain, /250\s?ms/);
+    assert.match(plain, /Back to practice/);
+    if (width! < 46) {
+      assert.match(plain, /Time 0.25s \/ 1.08s/);
+      assert.match(plain, /Badges 1 \/ 0 matched/);
+      assert.match(plain, /Target 100%; \(S\+A\)\/2/);
+      assert.match(plain, /Scores: goal averages/);
+    } else {
+      assert.match(plain, /Time: 00:00.25 target \/ 00:01.08 actual/);
+      assert.match(plain, /Expected commands: 1 target \/ 0 matched/);
+      assert.match(plain, /command match rate/);
+      assert.match(plain, /average goal scores/);
+    }
+  }
+});
+
+test('editing goals accept an alternate command once the correct buffer is saved', () => {
+  const topic = courseTopics.find(topic => topic.id === 'insert-append')!;
+  const lesson = createTopicPractice(topic);
+  let game = { ...newGame(), phase: 'play' as const, activeLesson: lesson, cursor: { ...lesson.start },
+    edit: newEdit(lesson.lines), course: { ...newCourseState(), topicId: topic.id, practiceId: lesson.id } };
+  // The first goal expects i; I produces the same file from column zero.
+  for (const key of 'IA\x1b') game = play(game, key, 1000) as typeof game;
   assert.equal(game.checkpoint, 0);
-  assert.match(game.message, /Use these commands.*W/);
+  assert.deepEqual(game.edit!.lines, ['Ada']);
+  for (const key of ':w\n') game = play(game, key, 1100) as typeof game;
+  assert.equal(game.checkpoint, 1);
+  assert.ok(game.checkpointScores[0]!.accuracy < 100);
 });
 
 test('expanded menu and mixed editing/navigation goals fit narrow and wide terminals', () => {
@@ -376,4 +514,54 @@ test('nested and multiline text objects, registers, undo, and visual endpoints r
   assert.deepEqual(edit.selectionAnchor, { row: 1, col: 0 });
   press('y'); press('G'); press('p');
   assert.deepEqual(edit.lines, ['one', 'two', 'one', 'two']);
+});
+
+test('Stats details follow the selected attempt and keep navigation visible on small screens', () => {
+  const game = newGame();
+  const older = { elapsedMs: 65000, actualKeys: 20, idealKeys: 10, speed: 40, accuracy: 50, proficiency: 45,
+    completedAt: '2026-01-01T12:00:00.000Z', scoringVersion: 1, commandsUsed: ['h'] };
+  const latest = { ...older, elapsedMs: 32000, speed: 80, proficiency: 65, commandsUsed: ['l'] };
+  game.progress.attempts[resultKey('normal', 0)] = [older, latest];
+  const engine = new GameEngine(game.progress, { clock, navigation: 'legacy' });
+  engine.handleInput('r');
+  for (let index = 0; index < stageIds.length; index++) engine.handleInput('j');
+  engine.handleInput('\n');
+  const render = (width = 80, height = 40) => new GameRenderer().render(engine.state, width, height, 1000)
+    .join('\n').replace(/\x1b\[[0-9;]*m/g, '');
+  assert.match(render(), /Attempt 2 of 2 · LATEST/);
+  assert.match(render(), /Keys used l/);
+  engine.handleInput('j');
+  assert.match(render(), /Attempt 1 of 2/);
+  assert.match(render(), /Time 01:05.00/);
+  assert.match(render(), /Speed 40%/);
+  assert.match(render(), /Keys used h/);
+  assert.doesNotMatch(render(), /LATEST/);
+  for (const [width, height] of [[22, 16], [32, 16], [46, 32], [80, 40]]) {
+    assert.match(render(width, height), /h ← prev|h ← Previous/);
+    assert.match(render(width, height), /j ↓ older · k ↑ newer/);
+    assert.match(render(width, height), /› #1/);
+  }
+  engine.handleInput('k');
+  assert.match(render(), /Attempt 2 of 2 · LATEST/);
+  engine.handleInput('l');
+  assert.match(render(), /Lesson 2 of/);
+  assert.match(render(), /No attempts yet/);
+});
+
+test('example input grows one key at a time and highlights the current key', () => {
+  const section = courseSections.find(section => section.topics.some(topic => topic.examples.some(example => example.keys.join('') === 'fa;')))!;
+  const topic = section.topics.find(topic => topic.examples.some(example => example.keys.join('') === 'fa;'))!;
+  const index = topic.examples.findIndex(example => example.keys.join('') === 'fa;');
+  const example = topic.examples[index]!;
+  const game = { ...newGame(), phase: 'course' as const, course: { ...newCourseState(),
+    view: 'examples' as const, sectionId: section.id, topicId: topic.id, demo: newDemo(example, index, 1000) } };
+  for (let step = 0; step <= example.keys.length; step++) {
+    const bottom = courseScreen(game, 80, 40, [], 1000 + step * DEMO_STEP_MS).bottom;
+    assert.equal(bottom[0]!.replace(/\x1b\[[0-9;]*m/g, ''), 'User Input:');
+    const input = bottom[1]!;
+    assert.equal(input.replace(/\x1b\[[0-9;]*m/g, ''),
+      example.keys.slice(0, step + 1).map(key => `[${key}]`).join(' ') + (step === 3 ? ' → Example complete!' : ''));
+    if (step < 3) assert.ok(input.includes(`\x1b[1;30;102m[${example.keys[step]}]`));
+    else assert.ok(!input.includes('\x1b[1;30;102m'));
+  }
 });

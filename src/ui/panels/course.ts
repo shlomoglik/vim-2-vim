@@ -1,13 +1,13 @@
 import { truncateToWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import { courseEntries } from '../../course/browser.js';
 import { displayKey } from '../../course/authoring.js';
-import { animatedDemo } from '../../course/demo.js';
+import { animatedDemo, DEMO_COMPLETE_MS, DEMO_STEP_MS } from '../../course/demo.js';
 import { sectionFor, topicFor } from '../../course/curriculum.js';
 import { createExamplePractice } from '../../course/practices.js';
 import type { Game } from '../../game/state.js';
 import { BOX_MIN_WIDTH } from '../constants.js';
 import { cursorShade, ghostFrame, targetPulse } from '../animation.js';
-import { cyan, faint, gold, green, keycap } from '../styles.js';
+import { cyan, faint, green, keycap, paint } from '../styles.js';
 import { editorPanel } from './editor.js';
 import { selectorPanel } from './selector.js';
 import { edgeViewportStart } from '../layout.js';
@@ -23,11 +23,28 @@ export function courseScreen(game: Game, width: number, height: number, masthead
     const stored = course.demo!;
     const example = topic!.examples[stored.index]!;
     const demo = animatedDemo(example, stored, nowMs);
-    top.push(`${gold(`[${example.command}]`)} ${faint(`Example ${demo.index + 1}/${topic!.examples.length}`)}`);
-    top.push(...wrapTextWithAnsi(example.description, width).slice(0, 2));
     const next = example.keys[demo.step];
-    const bottom = [next === undefined ? green('Example complete · r replay') : `${gold('NEXT')} ${cyan(`[${displayKey(next)}]`)} ${faint(`${demo.step}/${example.keys.length}`)}`,
-      faint('h/l example · Enter step'), faint('p practice · Esc back')];
+    const cycleMs = example.keys.length * DEMO_STEP_MS + DEMO_COMPLETE_MS;
+    const elapsedMs = Math.max(0, nowMs - stored.startedAtMs) % cycleMs;
+    const completionAgeMs = elapsedMs - example.keys.length * DEMO_STEP_MS;
+    const highlightNext = next === undefined && demo.index < topic!.examples.length - 1 && completionAgeMs < DEMO_STEP_MS;
+    const forwardArrow = highlightNext ? cyan('→') : faint('→');
+    const forwardKey = paint(highlightNext ? '1;30;106' : '1', 'l');
+    const examples = topic!.examples.map((_, index) => index === demo.index
+      ? paint('1;30;106', ` ${index + 1} `)
+      : faint(String(index + 1))).join(faint(', '));
+    top.push(...wrapTextWithAnsi(`${faint('prev')} ${paint('1', 'h')} ${faint('←')} ${examples} ${forwardArrow} ${faint('next')} ${forwardKey}`, width));
+    top.push(...wrapTextWithAnsi(`${cyan(`[${example.command}]`)} ${example.description}`, width).slice(0, 2));
+    const input = example.keys.slice(0, demo.step + 1).map((key, index) => {
+      const label = `[${displayKey(key)}]`;
+      return index === demo.step ? paint('1;30;102', label) : faint(label);
+    }).join(' ');
+    const inputLines = wrapTextWithAnsi(`${input}${next === undefined ? ` ${green('→ Example complete!')}` : ''}`, width);
+    const inputBudget = Math.max(1, height - top.length - (width >= BOX_MIN_WIDTH ? 4 : 1) - 6);
+    const visibleInput = inputLines.slice(-inputBudget);
+    if (visibleInput.length < inputLines.length) visibleInput[0] = `${faint('… ')}${truncateToWidth(visibleInput[0]!, Math.max(1, width - 2))}`;
+    const bottom = [faint('User Input:'), ...visibleInput,
+      `${paint('1', 'Enter')} ${faint('step ·')} ${paint('1', 'r')} ${faint('replay')}`, `${paint('1', 'p')} ${faint('practice ·')} ${paint('1', 'Esc')} ${faint('back')}`];
     const visibleRows = Math.max(1, height - top.length - bottom.length - (width >= BOX_MIN_WIDTH ? 4 : 1));
     const preview: Game = { ...game, activeLesson: createExamplePractice(topic!, example), cursor: demo.cursor, command: demo.command, edit: demo.edit, checkpoint: 0, lastHit: null };
     const middle = editorPanel(preview, width, false, 0, cursorShade(nowMs), targetPulse(nowMs), ghostFrame(nowMs), visibleRows);

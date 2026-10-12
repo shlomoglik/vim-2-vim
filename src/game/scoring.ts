@@ -11,6 +11,8 @@ export type CheckpointScore = {
   elapsedMs: number;
   speed: number;
   accuracy: number;
+  expectedCommands?: number;
+  matchedCommands?: number;
 };
 
 export type LessonResult = {
