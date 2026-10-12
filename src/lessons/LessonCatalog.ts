@@ -1,4 +1,6 @@
 import { createExamplePractice, createTopicPractice, extraPractices } from '../course/practices.js';
+import { createPuzzleMission } from '../course/missions.js';
+import { puzzleMissions } from '../course/missionCatalog.js';
 import { courseTopics, topicPracticeId } from '../course/curriculum.js';
 import type { Motion } from '../vim/motion.js';
 import { advancedLesson } from './advanced.js';
@@ -34,6 +36,7 @@ export class LessonCatalog {
   }
 
   createById(id: string, difficulty: Difficulty, unlocked: readonly Motion[], earned: readonly string[] = unlocked): Lesson {
+    if (puzzleMissions.some(mission => mission.id === id)) return createPuzzleMission(id, difficulty, earned);
     const topic = courseTopics.find(topic => topicPracticeId(topic) === id);
     if (topic) return createTopicPractice(topic, earned, difficulty);
     const index = stageIds.indexOf(id as typeof stageIds[number]);

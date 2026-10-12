@@ -1,7 +1,14 @@
 import { motion, repair } from './authoring.js';
 import type { CourseExample, CourseTopic } from './types.js';
 
-const islands = ['a.b cde.fgh ijk.lmnop', 'q.r stu.vwx xyz.abcde'];
+// Spaces divide WORDS; the stone borders divide Vim words within each column.
+export const columnGarden = [
+  ' _____     _____     _____ ',
+  '/II_II\\   /II_II\\   /II_II\\',
+  '|II_II|   |II_II|   |II_II|',
+  '|II_II|   |II_II|   |II_II|',
+  '/_____\\   /_____\\   /_____\\',
+];
 const cargo = ['2. Food crates', '5. Signal flags', '3. Fresh water', '6. Rescue ropes', '1. Navigation map', '4. Medical kits'];
 const sortedCargo = [cargo[4]!, cargo[0]!, cargo[2]!, cargo[5]!, cargo[1]!, cargo[3]!];
 const sea = '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~';
@@ -12,15 +19,15 @@ const shore = '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^';
 export function topicPuzzles(topic: CourseTopic, earned: readonly string[]): CourseExample[] {
   switch (topic.id) {
     case 'WORD-movement': return [
-      motion('W', 'Island hop: combine WORD jumps and small steps to reach the marked letter.', islands, { row: 1, col: 0 }, 'WWwllk'),
-      motion('E', 'Explore island edges with WORD jumps and small steps.', islands, { row: 0, col: 0 }, 'WEh'),
-      ...(earned.includes('Counts') ? [motion('W', 'Counted island hop: combine a WORD count with small steps.', islands, { row: 1, col: 0 }, '2Wwllk')] : []),
-      motion('B', 'Return to the middle island and explore its dotted path.', islands, { row: 1, col: 15 }, 'Bwlk'),
+      motion('W', 'Cross the column garden with WORD jumps. Reach the marked stone on the far column.', columnGarden, { row: 3, col: 1 }, 'WWwk'),
+      motion('E', 'Walk to the column edge, then descend to the next marked stone.', columnGarden, { row: 2, col: 21 }, 'Ej'),
+      ...(earned.includes('Counts') ? [motion('W', 'Count your WORD jumps across the column garden.', columnGarden, { row: 3, col: 1 }, '2Wwk')] : []),
+      motion('B', 'Return across the columns and climb to the marked stone.', columnGarden, { row: 3, col: 26 }, 'BBwk'),
     ];
     case 'word-movement': return [
-      motion('w', 'Cross the dotted stepping stones and climb to the marked island.', islands, { row: 1, col: 0 }, 'wwwlk'),
-      motion('e', 'Reach the end of the next island fragment, then climb.', islands, { row: 1, col: 4 }, 'eek'),
-      motion('b', 'Retrace two stepping stones, then move to the upper island.', islands, { row: 1, col: 15 }, 'bbk'),
+      motion('w', 'Cross the stone borders, follow the column edge, then climb to the marked stone.', columnGarden, { row: 3, col: 1 }, 'wwwek'),
+      motion('e', 'Cross to the far column and descend to the marked stone.', columnGarden, { row: 2, col: 15 }, 'wwwj'),
+      motion('b', 'Retrace the stone borders and climb back to the middle column.', columnGarden, { row: 3, col: 21 }, 'bbbk'),
     ];
     case 'copy-paste': return [
       repair('p', 'Harbor rescue: move the boat to the water beside the beach.',

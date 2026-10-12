@@ -1,8 +1,11 @@
+import { displayKey } from '../course/authoring.js';
+import { shortestRoute } from '../lessons/routing.js';
 import { navigationCommands } from '../course/curriculum.js';
 import { stageBadge } from '../lessons/index.js';
 import { interpret } from '../vim/command.js';
 import { editKey, newEdit } from '../vim/editing.js';
 import { practiceGoal } from '../course/practices.js';
+import { evaluateBonuses } from './bonuses.js';
 import { finishLesson } from './progression.js';
 import { scoreCheckpoint, scoreLesson } from './scoring.js';
 import { unlockedCommands, type Game } from './state.js';
@@ -12,7 +15,9 @@ function completeGoal(game: Game, nowMs: number, timestamp?: () => string): Game
   const score = scoreCheckpoint(lesson.idealKeys[game.checkpoint]!, game.keysThisCheckpoint, nowMs - game.checkpointAtMs!, lesson.pace);
   const required = lesson.goals![game.checkpoint]!.requiredCommands;
   const used = lesson.editing ? game.edit!.used : game.usedCommands.slice(game.goalCommandOffset ?? 0);
-  if (required.length) {
+  const goal = lesson.goals![game.checkpoint]!;
+  if (goal.bonuses) score.bonuses = evaluateBonuses(goal.bonuses, used, game.keysThisCheckpoint, game.checkpoint + 1);
+  if (required.length && !lesson.mission) {
     score.expectedCommands = required.length;
     score.matchedCommands = required.filter(command => used.includes(command)).length;
     score.accuracy *= score.matchedCommands / score.expectedCommands;
@@ -20,12 +25,25 @@ function completeGoal(game: Game, nowMs: number, timestamp?: () => string): Game
   const checkpointScores = [...game.checkpointScores, score];
   const checkpoint = game.checkpoint + 1;
   const hit = { ...game, checkpoint, checkpointScores, checkpointAtMs: nowMs, keysThisCheckpoint: 0,
-    lastHit: game.cursor, lastHitAtMs: nowMs, message: 'Goal complete!' };
+    lastHit: game.cursor, lastHitAtMs: nowMs, message: goal.successMessage ?? 'Goal complete!' };
   if (checkpoint === lesson.checkpoints.length) return finishLesson(hit, scoreLesson(checkpointScores, nowMs - game.startedAtMs!), nowMs, timestamp);
-  const next = practiceGoal(lesson, checkpoint);
+  let next = practiceGoal(lesson, checkpoint);
   const board = game.edit?.lines ?? lesson.lines;
   const sameBoard = board.length === next.lines.length && board.every((line, row) => line === next.lines[row]);
-  const cursor = sameBoard ? { ...game.cursor } : { ...next.start };
+  // Missions continue from the player's landing point, including alternate solutions.
+  const cursor = sameBoard || lesson.mission ? {
+    row: Math.min(game.cursor.row, next.lines.length - 1),
+    col: Math.min(game.cursor.col, Math.max(0, next.lines[Math.min(game.cursor.row, next.lines.length - 1)]!.length - 1)),
+  } : { ...next.start };
+  if (lesson.mission && (cursor.row !== next.start.row || cursor.col !== next.start.col)) {
+    const authored = next.goals![checkpoint]!;
+    const keys = [...shortestRoute(next.lines, cursor, authored.start, ['h', 'j', 'k', 'l']), ...authored.keys];
+    const goal = { ...authored, start: { ...cursor }, keys, hint: `Example: ${keys.map(displayKey).join(' ')}`,
+      shortHint: keys.map(displayKey).join('') };
+    next = { ...next, start: cursor, hint: goal.hint, goals: next.goals!.map((candidate, index) => index === checkpoint ? goal : candidate),
+      idealKeys: next.idealKeys.map((count, index) => index === checkpoint ? keys.length : count),
+      referenceRoutes: next.referenceRoutes.map((route, index) => index === checkpoint ? keys.join('') : route) };
+  }
   return { ...hit, activeLesson: { ...next, start: cursor }, cursor, command: { ...game.command, pending: '', lastFind: null, lastSearch: null, preferredCol: null },
     edit: next.editing ? newEdit(next.lines) : null, goalCommandOffset: game.usedCommands.length, lastHit: null };
 }

@@ -5,11 +5,12 @@ import type { LessonCatalog } from '../lessons/LessonCatalog.js';
 import { emptyCommand, interpret } from '../vim/command.js';
 import { newEdit } from '../vim/editing.js';
 import { courseMotions, courseSections, courseTopics, navigationCommands, topicFor, topicPracticeId } from './curriculum.js';
+import { missionsForTopic, puzzleMissions } from './missionCatalog.js';
 import { practiceGoalCount } from './practices.js';
 import { animatedDemo, DEMO_STEP_MS, newDemo, stepDemo } from './demo.js';
 import type { CourseState, CourseView } from './types.js';
 
-export type MenuEntry = { label: string; kind: 'heading' | 'topic' | 'examples' | 'practice' | 'stats' | 'difficulty'; id?: string };
+export type MenuEntry = { label: string; kind: 'heading' | 'topic' | 'examples' | 'practice' | 'puzzle' | 'stats' | 'difficulty'; id?: string };
 export type CourseLessonProvider = Pick<LessonCatalog, 'create'> & Partial<Pick<LessonCatalog, 'createById'>>;
 export const newCourseState = (): CourseState => ({ view: 'sections', sectionId: null, topicId: null, cursor: { row: 1, col: 0 }, demo: null, practiceId: null, cursors: {}, expandedTopics: [] });
 export const practiceCompleted = (progress: Progress, id: string) => !!progress.attempts[`${progress.difficulty}:${id}`]?.length;
@@ -30,6 +31,10 @@ export function courseEntries(game: Game): MenuEntry[] {
         { label: `    Examples · ${topic.commands.join(' ')}`, kind: 'examples', id: topic.id },
         { label: `    ${done ? '✓' : '·'} Practice · ${practiceGoalCount(topic, game.progress.difficulty)} goals`, kind: 'practice', id: topicPracticeId(topic) },
       );
+      if (expanded) entries.push(...missionsForTopic(topic.id).map(mission => ({
+        label: `    ${practiceCompleted(game.progress, mission.id) ? '✓' : '·'} Puzzles · ${mission.title} · ${mission.stages} ${mission.stages === 1 ? 'stage' : 'stages'}`,
+        kind: 'puzzle' as const, id: mission.id,
+      })));
       return entries;
     })]),
     { label: 'View stats', kind: 'stats' }, { label: 'Set difficulty', kind: 'difficulty' },
@@ -61,7 +66,8 @@ export function backCourse(game: Game): Game {
 
 function startPractice(game: Game, id: string, lessons: CourseLessonProvider): Game {
   const index = stageIds.indexOf(id as typeof stageIds[number]);
-  const selectedTopic = courseTopics.find(topic => topicPracticeId(topic) === id);
+  const mission = puzzleMissions.find(mission => mission.id === id);
+  const selectedTopic = courseTopics.find(topic => topicPracticeId(topic) === id || topic.id === mission?.topicId);
   let lesson: Lesson;
   if (index >= 0) lesson = lessons.create(index, game.progress.difficulty, courseMotions);
   else {
@@ -120,6 +126,7 @@ export function browseCourse(game: Game, key: string, lessons: CourseLessonProvi
           expandedTopics: [...expanded] } };
       }
       case 'examples': return { ...game, command: emptyCommand(), course: { ...course, topicId: entry.id ?? course.topicId, sectionId: courseSections.find(section => section.topics.some(topic => topic.id === entry.id))!.id, cursors: { ...course.cursors, sections: course.cursor }, view: 'examples', demo: newDemo(topicFor(entry.id ?? course.topicId)!.examples[0]!, 0, nowMs) } };
+      case 'puzzle':
       case 'practice': return startPractice(game, entry.id!, lessons);
       case 'stats': return { ...game, phase: 'stats', lesson: Math.min(game.lesson, LESSON_COUNT - 1), statsOffset: 0 };
       case 'difficulty': return { ...game, phase: 'difficulty', command: emptyCommand() };

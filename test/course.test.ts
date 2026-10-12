@@ -6,6 +6,7 @@ import { courseEntries, newCourseState } from '../src/course/browser.js';
 import { animatedDemo, DEMO_COMPLETE_MS, DEMO_STEP_MS, newDemo, stepDemo } from '../src/course/demo.js';
 import { courseMotions, courseSections, courseTopics, examplePracticeId, extraPracticeIds, navigationCommands, topicPracticeId, topicPracticeIds } from '../src/course/curriculum.js';
 import { createExamplePractice, createTopicPractice, practiceGoalCount, validateExample } from '../src/course/practices.js';
+import { puzzleMissions } from '../src/course/missionCatalog.js';
 import { topicPuzzles } from '../src/course/puzzles.js';
 import { scoreCheckpoint } from '../src/game/scoring.js';
 import { play } from '../src/game/play.js';
@@ -85,7 +86,7 @@ test('the curriculum covers each legacy practice and five sections without dupli
   const practices = new Set(courseTopics.flatMap(topicPracticeIds));
   assert.ok(courseTopics.every(topic => practices.has(topicPracticeId(topic))));
   assert.ok(stageIds.every(id => courseTopics.some(topic => topic.legacyPractices?.includes(id))));
-  assert.equal(extraPracticeIds.size, courseTopics.reduce((sum, topic) => sum + topic.examples.length + 1, 0));
+  assert.equal(extraPracticeIds.size, courseTopics.reduce((sum, topic) => sum + topic.examples.length + 1, 0) + puzzleMissions.length);
   const words = courseTopics.find(topic => topic.id === 'word-movement')!;
   const WORDS = courseTopics.find(topic => topic.id === 'WORD-movement')!;
   assert.deepEqual(words.commands, ['w', 'e', 'b']);
@@ -577,8 +578,8 @@ test('puzzles combine learned tools and independently authored editing targets',
   const words = courseTopics.find(topic => topic.id === 'WORD-movement')!;
   const puzzle = topicPuzzles(words, [])[0]!;
   const lesson = createExamplePractice(words, puzzle);
-  assert.equal(lesson.lines[lesson.checkpoints[0]!.row]![lesson.checkpoints[0]!.col], 'm');
-  assert.equal(puzzle.keys.join(''), 'WWwllk');
+  assert.equal(lesson.lines[lesson.checkpoints[0]!.row]![lesson.checkpoints[0]!.col], 'I');
+  assert.equal(puzzle.keys.join(''), 'WWwk');
   assert.ok(!topicPuzzles(words, []).some(example => example.keys.join('').startsWith('2W')));
   const counted = topicPuzzles(words, ['Counts']).find(example => example.keys.join('').startsWith('2W'))!;
   assert.deepEqual(createExamplePractice(words, counted).checkpoints, lesson.checkpoints);

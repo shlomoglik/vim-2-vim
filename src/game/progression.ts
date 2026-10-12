@@ -10,7 +10,8 @@ export function finishLesson(game: Game, result: LessonResult, nowMs: number, ti
   const completed = newUnlock ? game.progress.completed + 1 : game.progress.completed;
   const recordKey = game.course?.practiceId ? `${game.progress.difficulty}:${game.course.practiceId}` : resultKey(game.progress.difficulty, game.lesson);
   const attempt: Attempt = { ...result, completedAt: timestamp(), scoringVersion: SCORING_VERSION,
-    commandsUsed: [...new Set(game.usedCommands)] };
+    commandsUsed: [...new Set(game.usedCommands)],
+    ...(game.activeLesson?.mission ? { bonuses: game.checkpointScores.flatMap(score => score.bonuses ?? []) } : {}) };
   const topic = topicFor(game.course?.topicId ?? null);
   const topicBadges = topic && game.course?.practiceId === topicPracticeId(topic) ? topic.commands : [];
   const progress: Progress = { ...game.progress, completed, badges: [...new Set([...game.progress.badges, ...earnedBadges(completed), ...topicBadges])],

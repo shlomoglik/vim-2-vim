@@ -51,7 +51,7 @@ export function courseScreen(game: Game, width: number, height: number, masthead
     return { top, middle, bottom };
   }
   const entries = courseEntries(game);
-  const bottom = [faint('j/k move · / search · Esc back'), keycap('↵', 'Expand/collapse') + ' · ' + keycap('p', 'Practice')];
+  const bottom = [faint('j/k move · / search · Esc back'), keycap('↵', entries[course.cursor.row]?.kind === 'topic' ? 'Expand/collapse' : 'Open') + ' · ' + keycap('p', 'Practice')];
   const notes = game.message ? wrapTextWithAnsi(game.message, width) : [];
   const budget = height - top.length - bottom.length - notes.length;
   const visibleRows = Math.max(1, budget - (width >= BOX_MIN_WIDTH ? 4 : 1));

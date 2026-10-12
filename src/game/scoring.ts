@@ -1,3 +1,4 @@
+import type { BonusResult } from '../lessons/types.js';
 import { CENTISECOND_MS, CENTISECONDS_PER_MINUTE, CENTISECONDS_PER_SECOND, MAX_CHECKPOINT_SPEED, MAX_SCORE, MIN_ELAPSED_MS, PAR_MS_PER_KEY } from './constants.js';
 
 // Legacy targets retain their 250 ms par. Puzzle sessions add a difficulty pace
@@ -14,6 +15,7 @@ export type CheckpointScore = {
   accuracy: number;
   expectedCommands?: number;
   matchedCommands?: number;
+  bonuses?: BonusResult[];
 };
 
 export type LessonResult = {

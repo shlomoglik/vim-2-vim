@@ -23,7 +23,9 @@ function validAttempt(value: unknown): value is Attempt {
   const attempt = value as Attempt;
   return (attempt.completedAt === null || typeof attempt.completedAt === 'string' && Number.isFinite(Date.parse(attempt.completedAt))) &&
     (attempt.scoringVersion === undefined || Number.isInteger(attempt.scoringVersion) && attempt.scoringVersion > 0) &&
-    (attempt.commandsUsed === undefined || Array.isArray(attempt.commandsUsed) && attempt.commandsUsed.every(command => typeof command === 'string'));
+    (attempt.commandsUsed === undefined || Array.isArray(attempt.commandsUsed) && attempt.commandsUsed.every(command => typeof command === 'string')) &&
+    (attempt.bonuses === undefined || Array.isArray(attempt.bonuses) && attempt.bonuses.every(bonus =>
+      bonus && typeof bonus.id === 'string' && typeof bonus.label === 'string' && typeof bonus.earned === 'boolean'));
 }
 const validKey = (key: string) => {
   const match = /^(easy|normal|hard):(.+)$/.exec(key);
@@ -72,7 +74,7 @@ export function loadProgress(path = progressPath()): Progress {
       if (!attempts[key]) attempts[key] = [{ ...result, completedAt: null }];
     }
     for (const [key, history] of Object.entries(attempts)) {
-      const { completedAt: _, scoringVersion: __, commandsUsed: ___, ...latest } = history[history.length - 1]!;
+      const { completedAt: _, scoringVersion: __, commandsUsed: ___, bonuses: ____, ...latest } = history[history.length - 1]!;
       results[key] = latest;
     }
     return { completed, badges: [...new Set([...value.badges, ...earnedBadges(completed)])], difficulty, results, attempts };

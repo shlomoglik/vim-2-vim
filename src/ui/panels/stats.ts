@@ -53,6 +53,7 @@ export function statsBody(game: Game, width: number, budget: number): string[] {
       `${faint('Time')} ${paint('1', formatTime(selected.elapsedMs))}`);
     if (inner >= 48) rows.push(`${faint('Speed')} ${selected.speed}%  ${faint('Accuracy')} ${selected.accuracy}%  ${faint('Proficiency')} ${selected.proficiency}%`);
     else rows.push(`${faint('Speed')} ${selected.speed}%`, `${faint('Accuracy')} ${selected.accuracy}%`, `${faint('Proficiency')} ${selected.proficiency}%`);
+    if (selected.bonuses) rows.push(...wrapTextWithAnsi(green(`Mission complete · ${selected.bonuses.filter(bonus => bonus.earned).length}/${selected.bonuses.length} bonuses`), inner));
     if (addContext) {
       rows.push(faint(selected.completedAt ? `Completed ${attemptDate(selected.completedAt)}` : 'Date unavailable'));
       const previous = previousComparableAttempt(history.slice(0, history.length - offset));

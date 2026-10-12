@@ -14,6 +14,7 @@ export type Lesson = {
   requiredCommands?: readonly string[];
   editing?: { filename: string; expected: readonly string[]; requireSave: boolean };
   goals?: readonly PracticeGoal[];
+  mission?: { completeMessage: string };
   pace?: { msPerKey: number; thinkingMs: number };
 };
 
@@ -22,6 +23,10 @@ export type PracticeGoal = Pick<Lesson, 'lines' | 'start' | 'instruction' | 'hin
   keys: readonly string[];
   requiredCommands: readonly string[];
   focus: boolean;
+  stageTitle?: string;
+  shortHint?: string;
+  successMessage?: string;
+  bonuses?: readonly BonusObjective[];
 };
 
 
@@ -44,3 +49,9 @@ export type EditingDefinition = {
   referenceKeys?: number;
   start?: Position;
 };
+
+export type BonusObjective = { id: string; label: string; shortLabel?: string } & (
+  { kind: 'count' } | { kind: 'keys'; maxKeys: number } |
+  { kind: 'commands' | 'avoid'; commands: readonly string[] }
+);
+export type BonusResult = { id: string; label: string; earned: boolean };

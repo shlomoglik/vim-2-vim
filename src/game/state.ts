@@ -1,3 +1,4 @@
+import type { BonusResult } from '../lessons/types.js';
 import type { CourseState } from '../course/types.js';
 import { challengeKeys, challengeTitles, difficulties, LESSON_COUNT, stageIds, type Difficulty, type Lesson } from '../lessons/index.js';
 import { emptyCommand, type CommandState } from '../vim/command.js';
@@ -8,7 +9,7 @@ import type { CheckpointScore, LessonResult } from './scoring.js';
 export { challengeTitles } from '../lessons/catalog.js';
 export { SCORING_VERSION } from './constants.js';
 
-export type Attempt = LessonResult & { completedAt: string | null; scoringVersion?: number; commandsUsed?: string[] };
+export type Attempt = LessonResult & { completedAt: string | null; scoringVersion?: number; commandsUsed?: string[]; bonuses?: BonusResult[] };
 export type Progress = { completed: number; badges: string[]; difficulty: Difficulty; results: Record<string, LessonResult>; attempts: Record<string, Attempt[]> };
 export type Phase = 'menu' | 'hub' | 'difficulty' | 'stats' | 'play' | 'reward' | 'complete' | 'course';
 export type Game = {

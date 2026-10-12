@@ -53,14 +53,21 @@ export class GameRenderer {
     } else if (game.phase === 'reward') {
       const lesson = game.activeLesson!;
       const result = game.progress.results[game.course?.practiceId ? `${game.progress.difficulty}:${game.course.practiceId}` : resultKey(game.progress.difficulty, game.lesson)];
-      top = [...masthead, green(shining ? '✦ LEVEL CLEAR ✦' : 'LEVEL CLEAR'),
-        game.course?.practiceId ? cyan(topicFor(game.course.topicId)!.title) : `${faint('LESSON')} ${game.lesson + 1} ${game.progress.completed}/${LESSON_COUNT}`];
+      top = [...masthead, green(lesson.mission ? 'MISSION COMPLETE' : shining ? '✦ LEVEL CLEAR ✦' : 'LEVEL CLEAR'),
+        game.course?.practiceId ? cyan(lesson.mission ? lesson.title : topicFor(game.course.topicId)!.title) : `${faint('LESSON')} ${game.lesson + 1} ${game.progress.completed}/${LESSON_COUNT}`];
       const budget = height - top.length - 1;
       const topic = topicFor(game.course?.topicId ?? null);
       const topicReward = topic && game.course?.practiceId === topicPracticeId(topic);
       middle = lesson.badge ? [`${pink(game.newUnlock ? 'NEW REWARD' : 'REWARD')} ${gold(shining ? `✦ ${lesson.badge} ✦` : `[ ${lesson.badge} ]`)}`] :
         [topicReward ? `${gold('BADGES')} ${topic.commands.map(command => green(`[${command}]`)).join(' ')}` : green('STAGE CLEAR')];
-      if (result) {
+      if (lesson.mission) {
+        const bonuses = game.checkpointScores.flatMap(score => score.bonuses ?? []);
+        middle = [green(lesson.mission.completeMessage), faint(`${lesson.goals!.length}/${lesson.goals!.length} stages complete`),
+          gold(`BONUSES ${bonuses.filter(bonus => bonus.earned).length}/${bonuses.length} (optional)`),
+          ...bonuses.map(bonus => bonus.earned ? green(`★ ${bonus.label}`) : faint(`○ ${bonus.label}`))
+            .flatMap(line => wrapTextWithAnsi(line, width))];
+        if (result && middle.length + 1 < budget) middle.push(faint(`${result.actualKeys} keys · ${formatTime(result.elapsedMs)}`));
+      } else if (result) {
         middle.push(...resultPanel(result, game.checkpointScores, width, budget - middle.length));
       }
       if (lesson.editing && middle.length < budget) middle.push(faint(`${lesson.editing.filename} saved`));
@@ -68,7 +75,7 @@ export class GameRenderer {
         const guide = motionGuidePanel(lesson.badge, width, nowMs - (game.lastHitAtMs ?? nowMs), cursorShade(nowMs));
         if (middle.length + guide.length <= budget) middle.push(...guide);
       }
-      bottom = [keycap('↵', game.course?.practiceId ? 'Back to practice' : 'Continue')];
+      bottom = [keycap('↵', lesson.mission ? 'Back to puzzles' : game.course?.practiceId ? 'Back to practice' : 'Continue')];
     } else if (game.phase === 'hub' || game.phase === 'difficulty') {
       const selectingDifficulty = game.phase === 'difficulty';
       const options = selectingDifficulty ? difficultyLines : courseOptions(width, game.progress.completed);
@@ -90,23 +97,35 @@ export class GameRenderer {
       const lesson = game.activeLesson!;
       const goal = lesson.checkpoints[game.checkpoint]!;
       const instruction = lesson.instruction;
-      const lessonName = game.course?.practiceId ? topicFor(game.course.topicId)!.title : lesson.title.split('· ')[1] ?? '';
+      const lessonName = lesson.mission ? lesson.title : game.course?.practiceId ? topicFor(game.course.topicId)!.title : lesson.title.split('· ')[1] ?? '';
       top = [...masthead, ...(game.course?.practiceId ? [cyan(truncateToWidth(lessonName, width))] : [`${cyan(`STAGE ${String(game.lesson + 1).padStart(2, '0')}`)} ${faint(`/ ${String(LESSON_COUNT).padStart(2, '0')}`)}${width >= BOX_MIN_WIDTH ? ` ${pink(lessonName)}` : ''}`,
         ...(width < BOX_MIN_WIDTH ? [pink(lessonName)] : [])]),
         ...wrapTextWithAnsi(instruction, width),
-        ...(lesson.goals ? [gold(`GOAL ${game.checkpoint + 1}/${lesson.goals.length}`)] : []),
+        ...(lesson.goals ? [gold(`${lesson.mission ? 'MISSION' : 'GOAL'} ${game.checkpoint + 1}/${lesson.goals.length}${lesson.mission ? ` · ${lesson.goals[game.checkpoint]!.stageTitle}` : ''}`)] : []),
+        ...(lesson.mission ? (lesson.goals![game.checkpoint]!.bonuses ?? []).flatMap(bonus => wrapTextWithAnsi(`${gold('BONUS (optional)')} ${bonus.label}`, width)) : []),
         ...(lesson.goals ? wrapTextWithAnsi(`${gold('USE')} ${lesson.goals[game.checkpoint]!.requiredCommands.map(command => `[${command}]`).join(' ')}`, width) : []),
         ...(lesson.editing ? wrapTextWithAnsi(`${gold('FILE')} ${game.edit?.lines.join('\n') !== game.edit?.savedLines.join('\n') ? '[+]' : game.edit?.saved ? 'saved' : ''} ${lesson.editing.filename}`, width) :
         [`${gold('TARGET')} ${game.checkpoint + 1}/${lesson.checkpoints.length} ${faint(`@ ${goal.row + 1}:${goal.col + 1}`)}${width >= WIDE_VIEW_WIDTH ? ` ${dots(game.checkpoint, lesson.checkpoints.length)}` : ''}`]),
         ...(lesson.editing ? wrapTextWithAnsi(`${gold('TARGET')} ${editingMismatch(game.edit!.lines, lesson.editing.expected) ?? 'Match reached. Save with :w.'}`, width) :
           lesson.requiredCommands ? wrapTextWithAnsi(`${gold('REMAINING')} ${lesson.requiredCommands.filter(command => !game.usedCommands.includes(command)).join(' ') || 'none'}`, width) : [])];
+      if (lesson.mission && (width < BOX_MIN_WIDTH + 14 || height < 28)) {
+        const stage = lesson.goals![game.checkpoint]!;
+        top = [...masthead, cyan(truncateToWidth(lesson.title, width)),
+          gold(truncateToWidth(`MISSION ${game.checkpoint + 1}/${lesson.goals!.length} · ${stage.stageTitle}`, width)),
+          truncateToWidth(instruction, width),
+          ...(stage.bonuses ?? []).map(bonus => truncateToWidth(`${gold('BONUS')} ${bonus.shortLabel ?? bonus.label} ${faint('(optional)')}`, width)),
+          ...wrapTextWithAnsi(`${gold('USE')} ${stage.requiredCommands.map(command => `[${command}]`).join('')}`, width),
+          truncateToWidth(lesson.editing ? `${gold('TARGET')} ${editingMismatch(game.edit!.lines, lesson.editing.expected) ?? 'Save with :w'}` :
+            `${gold('TARGET')} @ ${goal.row + 1}:${goal.col + 1}`, width)];
+      }
       const elapsed = game.startedAtMs === null ? 0 : nowMs - game.startedAtMs;
       bottom = [`${cyan('TIME')} ${game.startedAtMs === null ? 'Ready' : formatTime(elapsed)}`,
         lesson.editing ? `${paint('2;38;5;150', 'Green = next target')} ${faint('· gray = matches · · = space · + add · ↳ fix')}` :
           `${faint('BADGES')} ${badgeDisplay(game.progress.badges, width)}`, faint(game.course?.practiceId ? 'F1 hint · Esc back (Normal)' : 'F1 hint · Ctrl+C quit')];
-      const notice = flashing ? [green(flashFrame ? '✦ Target reached! ✦' : '✓ Target reached!')] :
-        game.hint ? wrapTextWithAnsi(`${gold('TIP')} ${lesson.hint}`, width) :
+      let notice = flashing ? [green(flashFrame ? '✦ Target reached! ✦' : '✓ Target reached!')] :
+        game.hint ? wrapTextWithAnsi(`${gold('TIP')} ${lesson.mission && (width < 46 || height < 28) ? lesson.goals![game.checkpoint]!.shortHint : lesson.hint}`, width) :
         game.message ? wrapTextWithAnsi(game.message, width) : [];
+      if (lesson.mission) notice = notice.slice(0, Math.max(1, height - top.length - bottom.length - (width >= BOX_MIN_WIDTH ? 5 : 2)));
       const budget = height - top.length - bottom.length - notice.length;
       const visibleRows = Math.max(1, budget - (width >= BOX_MIN_WIDTH ? 4 : 1));
       middle = [...editorPanel(game, width, flashing, flashFrame, cursorShade(nowMs), targetPulse(nowMs), ghostFrame(nowMs), visibleRows), ...notice];
