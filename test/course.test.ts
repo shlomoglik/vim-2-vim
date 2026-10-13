@@ -18,6 +18,7 @@ import { LessonCatalog } from '../src/lessons/LessonCatalog.js';
 import { difficulties, stageIds } from '../src/lessons/catalog.js';
 import { GameRenderer } from '../src/ui/GameRenderer.js';
 import { courseScreen } from '../src/ui/panels/course.js';
+import { editorPanel } from '../src/ui/panels/editor.js';
 import { emptyCommand, interpret } from '../src/vim/command.js';
 import { visibleWidth } from '@earendil-works/pi-tui';
 import assert from 'node:assert/strict';
@@ -555,6 +556,23 @@ test('Stats details follow the selected attempt and keep navigation visible on s
   assert.match(render(), /No attempts yet/);
 });
 
+test('editor gutters align text and borders across line-number digit boundaries', () => {
+  const template = createExamplePractice(courseTopics[0]!, courseTopics[0]!.examples[0]!);
+  for (const lineCount of [12, 105]) for (const width of [22, 46]) {
+    const lines = Array.from({ length: lineCount }, () => '  task = ready');
+    const boundary = lineCount === 12 ? 9 : 99;
+    const game = { ...newGame(), activeLesson: { ...template, lines, checkpoints: [{ row: boundary, col: 2 }] },
+      cursor: { row: boundary, col: 2 } };
+    const rendered = editorPanel(game, width, false, 0, 255, 0, 0, lineCount + 2);
+    const plain = rendered.map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    assert.ok(rendered.every(line => visibleWidth(line) === width));
+    const textColumns = plain.filter(line => line.includes('task = ready')).map(line => line.indexOf('task'));
+    assert.ok(textColumns.length > 1);
+    assert.equal(new Set(textColumns).size, 1);
+    assert.ok(plain.some(line => line.includes('~')));
+  }
+});
+
 test('example input grows one key at a time and highlights the current key', () => {
   const section = courseSections.find(section => section.topics.some(topic => topic.examples.some(example => example.keys.join('') === 'fa;')))!;
   const topic = section.topics.find(topic => topic.examples.some(example => example.keys.join('') === 'fa;'))!;
@@ -563,9 +581,10 @@ test('example input grows one key at a time and highlights the current key', () 
   const game = { ...newGame(), phase: 'course' as const, course: { ...newCourseState(),
     view: 'examples' as const, sectionId: section.id, topicId: topic.id, demo: newDemo(example, index, 1000) } };
   for (let step = 0; step <= example.keys.length; step++) {
-    const bottom = courseScreen(game, 80, 40, [], 1000 + step * DEMO_STEP_MS).bottom;
-    assert.equal(bottom[0]!.replace(/\x1b\[[0-9;]*m/g, ''), 'User Input:');
-    const input = bottom[1]!;
+    const { top, bottom } = courseScreen(game, 80, 40, [], 1000 + step * DEMO_STEP_MS);
+    assert.equal(top.at(-2)!.replace(/\x1b\[[0-9;]*m/g, ''), 'User Input:');
+    assert.equal(bottom.length, 2);
+    const input = top.at(-1)!;
     assert.equal(input.replace(/\x1b\[[0-9;]*m/g, ''),
       example.keys.slice(0, step + 1).map(key => `[${key}]`).join(' ') + (step === 3 ? ' → Example complete!' : ''));
     if (step < 3) assert.ok(input.includes(`\x1b[1;30;102m[${example.keys[step]}]`));

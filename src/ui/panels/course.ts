@@ -43,7 +43,8 @@ export function courseScreen(game: Game, width: number, height: number, masthead
     const inputBudget = Math.max(1, height - top.length - (width >= BOX_MIN_WIDTH ? 4 : 1) - 6);
     const visibleInput = inputLines.slice(-inputBudget);
     if (visibleInput.length < inputLines.length) visibleInput[0] = `${faint('… ')}${truncateToWidth(visibleInput[0]!, Math.max(1, width - 2))}`;
-    const bottom = [faint('User Input:'), ...visibleInput,
+    top.push(faint('User Input:'), ...visibleInput);
+    const bottom = [
       `${paint('1', 'Enter')} ${faint('step ·')} ${paint('1', 'r')} ${faint('replay')}`, `${paint('1', 'p')} ${faint('practice ·')} ${paint('1', 'Esc')} ${faint('back')}`];
     const visibleRows = Math.max(1, height - top.length - bottom.length - (width >= BOX_MIN_WIDTH ? 4 : 1));
     const preview: Game = { ...game, activeLesson: createExamplePractice(topic!, example), cursor: demo.cursor, command: demo.command, edit: demo.edit, checkpoint: 0, lastHit: null };

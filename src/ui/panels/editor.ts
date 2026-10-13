@@ -15,7 +15,9 @@ export function editorPanel(game: Game, width: number, flashing: boolean, flashF
   const boxed = width >= BOX_MIN_WIDTH;
   const panelWidth = boxed ? Math.min(width, PANEL_WIDTH) : width;
   const contentWidth = panelWidth - (boxed ? 2 : 0);
-  const gutterWidth = boxed ? 5 : 2;
+  const numberWidth = String(lines.length).length;
+  const markerWidth = boxed || lesson.editing ? 1 : 0;
+  const gutterWidth = numberWidth + markerWidth + (boxed ? 3 : 1);
   const textWidth = contentWidth - gutterWidth;
   const base = '\x1b[0;48;5;236;38;5;253m';
   const hintBase = '\x1b[0;48;5;238;38;5;145m';
@@ -38,9 +40,10 @@ export function editorPanel(game: Game, width: number, flashing: boolean, flashF
     const isActive = previewRow && (previewRow.kind !== 'live' || preview[activeTarget] === previewRow);
     const ghost = isActive ? source === null ? target : source !== undefined && target?.startsWith(source) ? target : null : null;
     const wrongCol = isActive && source !== null && source !== undefined && target !== null && target !== undefined ? firstDifferenceColumn(source, target) : -1;
-    const label = previewRow === undefined ? (boxed ? '~  │ ' : '~ ') : row === null ?
-      (previewRow.kind === 'replace' ? (boxed ? '↳  │ ' : '↳ ') : (boxed ? '+  │ ' : '+ ')) : boxed ?
-      `${lesson.editing && target === null ? '!' : !lesson.editing && row === goal.row ? '▶' : ' '}${row + 1} │ ` : `${lesson.editing && target === null ? '!' : ''}${row + 1}│`;
+    const marker = lesson.editing && target === null ? '!' : !lesson.editing && row === goal.row ? '▶' : ' ';
+    const label = previewRow === undefined || row === null
+      ? `${(previewRow === undefined ? '~' : previewRow.kind === 'replace' ? '↳' : '+').padEnd(numberWidth + markerWidth)}${boxed ? ' │ ' : '│'}`
+      : `${markerWidth ? marker : ''}${String(row! + 1).padStart(numberWidth)}${boxed ? ' │ ' : '│'}`;
     let line = `${lesson.editing && previewRow?.kind === 'live' && target === null ? '\x1b[48;5;234;38;5;211m' : !lesson.editing && row === goal.row ? '\x1b[48;5;234;1;92m' : gutter}${label}${rowBase}`;
     if (previewRow) {
       const focus = row === game.cursor.row ? game.cursor.col : row === goal.row ? goal.col : 0;
