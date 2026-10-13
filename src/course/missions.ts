@@ -1,5 +1,5 @@
 import { displayKey, motion, repair } from './authoring.js';
-import { courseTopics } from './curriculum.js';
+import { courseTopics, navigationCommands } from './curriculum.js';
 import { createExamplePractice } from './practices.js';
 import { topicPuzzles } from './puzzles.js';
 import { puzzleMissions } from './missionCatalog.js';
@@ -36,6 +36,23 @@ export function createPuzzleMission(id: string, difficulty: Difficulty, earned: 
       goal(supplies, topic.id, 'Organize the cargo', 'Cargo ready. Harbor restored!', ['dd', 'p', 'P', 'j', 'k'],
         [{ id: 'cut-and-put', label: 'Sort with dd, p and P', shortLabel: 'Use dd,p,P', kind: 'commands', commands: ['dd', 'p', 'P'] }]),
     ];
+  } else if (mission.topicId === 'small-edits') {
+    const [thorns, taps] = topicPuzzles(topic, earned) as [CourseExample, CourseExample];
+    // Deleting the last thorn leaves the cursor on the trailing space of its label.
+    const openTaps = { ...taps, start: { row: 7, col: 9 }, keys: [...'kkkkkkhhhh', ...taps.keys] };
+    goals = [
+      goal(thorns, topic.id, 'Clear the thorns', 'Thorns cleared. Time to water the flowers!', ['x', 'h', 'j', 'k', 'l'],
+        [{ id: 'pluck', label: 'Remove the thorns with x', shortLabel: 'Use x', kind: 'commands', commands: ['x'] }]),
+      goal(openTaps, topic.id, 'Water the flowers', 'Taps open. The garden is blooming!', ['r', 'h', 'j', 'k', 'l'],
+        [{ id: 'open-taps', label: 'Open the taps with r', shortLabel: 'Use r', kind: 'commands', commands: ['r'] }]),
+    ];
+  } else if (mission.topicId === 'basic-movement') {
+    goals = topicPuzzles(topic, earned).map((example, index) => goal(example, topic.id,
+      index < 4 ? `Money bag ${index + 1} of 4` : 'Reach the campsite',
+      index < 4 ? `Money bag ${index + 1}/4 collected!` : 'Treasure secured. Camp reached!',
+      ['h', 'j', 'k', 'l'],
+      [{ id: 'small-steps', label: 'Navigate using only h, j, k and l', shortLabel: 'Use h/j/k/l', kind: 'avoid',
+        commands: navigationCommands.filter(command => !['h', 'j', 'k', 'l'].includes(command)) }]));
   } else {
     const examples = topicPuzzles(topic, earned).filter(example => !example.keys.join('').startsWith('2W'));
     goals = examples.map((example, index) => goal(example, topic.id, mission.stages === 1 ? mission.title : ['Cross the garden', 'Follow the edge', 'Return to the middle'][index]!,

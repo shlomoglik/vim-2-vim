@@ -434,15 +434,15 @@ test('reward explains percentage targets and actuals, including missed commands'
     assert.match(plain, /ACCURACY.*0%/);
     assert.match(plain, /PROFICIENCY.*50%/);
     assert.match(plain, /Keys[: ]+1 (ideal )?\/ 8/);
-    assert.match(plain, /500\s?ms/);
+    assert.match(plain, /400\s?ms/);
     assert.match(plain, /Back to practice/);
     if (width! < 46) {
-      assert.match(plain, /Time 2.50s \/ 1.08s/);
+      assert.match(plain, /Time 2.40s \/ 1.08s/);
       assert.match(plain, /Badges 1 \/ 0 matched/);
       assert.match(plain, /Target 100%; \(S\+A\)\/2/);
       assert.match(plain, /Scores: goal averages/);
     } else {
-      assert.match(plain, /Time: 00:02.50 target \/ 00:01.08 actual/);
+      assert.match(plain, /Time: 00:02.40 target \/ 00:01.08 actual/);
       assert.match(plain, /Expected commands: 1 target \/ 0 matched/);
       assert.match(plain, /command match rate/);
       assert.match(plain, /average goal scores/);
@@ -602,7 +602,7 @@ test('puzzles combine learned tools and independently authored editing targets',
   assert.ok(!topicPuzzles(words, []).some(example => example.keys.join('').startsWith('2W')));
   const counted = topicPuzzles(words, ['Counts']).find(example => example.keys.join('').startsWith('2W'))!;
   assert.deepEqual(createExamplePractice(words, counted).checkpoints, lesson.checkpoints);
-  for (const id of ['copy-paste', 'edit-lines']) {
+  for (const id of ['copy-paste', 'edit-lines', 'small-edits']) {
     const topic = courseTopics.find(topic => topic.id === id)!;
     for (const puzzle of topicPuzzles(topic, [])) validateExample(puzzle);
     assert.ok(createTopicPractice(topic).goals!.some(goal => goal.instruction.startsWith('Quest')));

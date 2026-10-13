@@ -9,6 +9,32 @@ export const columnGarden = [
   '|II_II|   |II_II|   |II_II|',
   '/_____\\   /_____\\   /_____\\',
 ];
+
+// One stable map: each money bag is a checkpoint, followed by the campsite.
+export const treasureTrail = [
+  '___          ___',
+  '> $ \\   ___   / $ \\',
+  '    |  |__/   |    |',
+  '    |__/   |__|    |',
+  '_*$     _*___    |  ^ |',
+  '  \\_*_/      \\__  |_ __|',
+  '              \\*    $ /',
+  '               \\__*__/',
+].map(line => line.padEnd(26, ' '));
+
+export const flowerGarden = [
+  '      FLOWER GARDEN',
+  '    [|]-------------[|]',
+  '     |               |',
+  '    \\|/     \\|/     \\|/',
+  '    (@)     (@)     (@)',
+  '     |       |       |',
+  '  ___|_______|_______|___',
+  '  Thorns: ****',
+];
+export const thornFreeGarden = [...flowerGarden.slice(0, 7), '  Thorns: '];
+export const wateredGarden = [thornFreeGarden[0]!, '    [!]-------------[!]', ...thornFreeGarden.slice(2)];
+
 const cargo = ['2. Food crates', '5. Signal flags', '3. Fresh water', '6. Rescue ropes', '1. Navigation map', '4. Medical kits'];
 const sortedCargo = [cargo[4]!, cargo[0]!, cargo[2]!, cargo[5]!, cargo[1]!, cargo[3]!];
 const sea = '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~';
@@ -40,6 +66,19 @@ export function topicPuzzles(topic: CourseTopic, earned: readonly string[]): Cou
       repair('dd', 'Clear the trail: remove both fallen trees and keep the route markers.',
         ['START', 'fallen tree', 'trail marker', 'fallen tree', 'FINISH'],
         ['START', 'trail marker', 'FINISH'], 'jddjdd'),
+    ];
+    case 'small-edits': return [
+      repair('x', 'Clear the thorn pile (*), keeping the flowers and irrigation pipes intact.',
+        flowerGarden, thornFreeGarden, 'xxxx', { row: 7, col: 10 }, 'garden-thorns'),
+      repair('r', 'Open both irrigation taps: replace the | inside each bracket with !.',
+        thornFreeGarden, wateredGarden, 'r!' + 'l'.repeat(16) + 'r!', { row: 1, col: 5 }, 'garden-taps'),
+    ];
+    case 'basic-movement': return [
+      motion('l', 'Collect the first money bag ($) beside the entrance (>).', treasureTrail, { row: 1, col: 0 }, 'll'),
+      motion('j', 'Collect the money bag ($) on the lower island.', treasureTrail, { row: 1, col: 2 }, 'jjj'),
+      motion('k', 'Climb to the money bag ($) on the far island.', treasureTrail, { row: 4, col: 2 }, 'kkk' + 'l'.repeat(14)),
+      motion('l', 'Collect the last money bag ($) near the bottom of the trail.', treasureTrail, { row: 1, col: 16 }, 'jjjjjllll'),
+      motion('k', 'All four bags found! Reach the campsite (^).', treasureTrail, { row: 6, col: 20 }, 'kk'),
     ];
     default: {
       if (topic.examples.some(example => example.expected)) return [];

@@ -3,6 +3,8 @@ export const puzzleMissions = [
   { id: 'puzzle:WORD-movement:islands', topicId: 'WORD-movement', title: 'Column garden', stages: 3 },
   { id: 'puzzle:edit-lines:trail', topicId: 'edit-lines', title: 'Clear the trail', stages: 1 },
   { id: 'puzzle:copy-paste:harbor', topicId: 'copy-paste', title: 'Harbor rescue', stages: 3 },
+  { id: 'puzzle:replace-delete:garden', topicId: 'small-edits', title: 'Flower keeper', stages: 2 },
+  { id: 'puzzle:basic-movement:treasure', topicId: 'basic-movement', title: 'Treasure trail', stages: 5 },
 ] as const;
 export const missionsForTopic = (topicId: string) => puzzleMissions.filter(mission => mission.topicId === topicId);
 

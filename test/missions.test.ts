@@ -189,3 +189,80 @@ test('harbor keeps an alternate landing position and rebases the cargo hint from
   input(engine, continued.keys);
   assert.equal(engine.state.phase, 'reward');
 });
+
+
+test('treasure trail visits all four bags before camp and finishes each route on its first target hit', () => {
+  const engine = openMission('puzzle:basic-movement:treasure');
+  const lesson = engine.state.activeLesson!;
+  assert.equal(engine.state.edit, null);
+  input(engine, ['f1', 'f1', 'z']);
+  assert.equal(engine.state.checkpoint, 0, 'hints and stationary input cannot collect a bag');
+  const bags = new Set<string>();
+  for (const [index, stage] of lesson.goals!.entries()) {
+    const symbol = stage.lines[stage.target.row]![stage.target.col];
+    assert.equal(symbol, index < 4 ? '$' : '^');
+    if (index < 4) bags.add(`${stage.target.row}:${stage.target.col}`);
+    assert.notDeepEqual(stage.start, stage.target);
+    for (const [step, key] of stage.keys.entries()) {
+      const before = engine.state;
+      const landing = interpret(stage.lines, before.cursor, before.command, key, navigationCommands).cursor;
+      engine.handleInput(key);
+      assert.equal(engine.state.checkpoint, index + (step === stage.keys.length - 1 ? 1 : 0));
+      if (step === stage.keys.length - 1) {
+        assert.deepEqual(engine.state.cursor, landing);
+        if (index < 4) assert.deepEqual(engine.state.activeLesson!.lines, lesson.lines);
+      }
+    }
+  }
+  assert.equal(bags.size, 4);
+  assert.equal(engine.state.phase, 'reward');
+  assert.ok(engine.state.progress.attempts['normal:puzzle:basic-movement:treasure']![0]!.bonuses!.every(bonus => bonus.earned));
+});
+
+test('garden requires edits and saves, preserves alternate landing, and rebases the watering route', () => {
+  const engine = openMission('puzzle:replace-delete:garden');
+  input(engine, [...':w\n']);
+  assert.equal(engine.state.checkpoint, 0);
+  // Delete to the end instead of plucking with x, then walk back to the title.
+  input(engine, [...'Dgg0']);
+  assert.equal(engine.state.checkpoint, 0, 'the correct buffer still needs saving');
+  const repaired = [...engine.state.edit!.lines];
+  const landing = { ...engine.state.cursor };
+  assert.deepEqual(landing, { row: 0, col: 0 });
+  input(engine, [...':w\n']);
+  assert.equal(engine.state.checkpoint, 1);
+  assert.deepEqual(engine.state.cursor, landing);
+  assert.deepEqual(engine.state.activeLesson!.lines, repaired);
+  const next = engine.state.activeLesson!.goals![1]!;
+  assert.deepEqual(next.start, landing);
+  assert.equal(engine.state.activeLesson!.idealKeys[1], next.keys.length);
+  assert.equal(next.shortHint, next.keys.map(key => key === '\n' ? 'Enter' : key).join(''));
+  input(engine, next.keys);
+  assert.equal(engine.state.phase, 'reward');
+  assert.deepEqual(engine.state.progress.attempts['normal:puzzle:replace-delete:garden']![0]!.bonuses!.map(bonus => bonus.earned), [false, true]);
+});
+
+test('new puzzle stages and hints fit small and large terminals', () => {
+  const renderer = new GameRenderer();
+  for (const id of ['puzzle:basic-movement:treasure', 'puzzle:replace-delete:garden']) {
+    const engine = openMission(id);
+    const lesson = engine.state.activeLesson!;
+    const states = [];
+    for (const stage of lesson.goals!) {
+      states.push(engine.state);
+      engine.handleInput('f1');
+      states.push(engine.state);
+      engine.handleInput('f1');
+      input(engine, stage.keys);
+    }
+    states.push(engine.state);
+    for (const state of states) for (const [width, height] of [[22, 16], [32, 24], [46, 32], [80, 40]]) {
+      const lines = renderer.render(state, width!, height!, 3000);
+      assert.equal(lines.length, height);
+      assert.ok(lines.every(line => visibleWidth(line) <= width!));
+      const plain = lines.join('\n').replace(/\x1b\[[0-9;]*m/g, '');
+      assert.match(plain, state.phase === 'play' ? /MISSION/ : /MISSION COMPLETE/);
+      if (state.hint) assert.match(plain, /TIP/);
+    }
+  }
+});
